@@ -1,0 +1,7 @@
+.env
+*.bak
+*.log
+.vs/
+.idea/
+bin/
+obj/
