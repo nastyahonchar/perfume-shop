@@ -1,0 +1,23 @@
+{
+  "_id": { "$oid": "66f0c2a10000000000000001" },
+  "productId": 1,
+  "productName": "Pumpkin Velours",
+  "brandName": "Maison Aurelle",
+  "author": { "userId": "u-1", "displayName": "Олена" },
+  "rating": 5,
+  "title": "Осінь у флаконі",
+  "text": "Тепле гарбузове серце і кориця, тримається цілий день.",
+  "verifiedPurchase": true,
+  "photos": ["rev1-a.jpg", "rev1-b.jpg"],
+  "scentProfile": {
+    "longevityHours": 9,
+    "sillage": "moderate",
+    "seasonOfWear": ["Autumn", "Winter"],
+    "notesRated": [ { "note": "Pumpkin", "score": 5 }, { "note": "Vanilla", "score": 4 } ]
+  },
+  "comments": [
+    { "author": { "userId": "u-7", "displayName": "Андрій" }, "text": "Згоден", "createdAt": { "$date": "2026-10-03T09:30:00Z" } }
+  ],
+  "discussionId": { "$oid": "66f0c3a10000000000000001" },
+  "createdAt": { "$date": "2026-10-02T18:00:00Z" }
+}

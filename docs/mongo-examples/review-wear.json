@@ -1,0 +1,12 @@
+{
+  "_id": { "$oid": "66f0c2a10000000000000004" },
+  "productId": 5,
+  "productName": "Spiced Orchard",
+  "brandName": "Velvet Atelier",
+  "author": { "userId": "u-9", "displayName": "Софія" },
+  "rating": 3,
+  "text": "Після двох тижнів носіння не впевнена, що це мій аромат.",
+  "wearInfo": { "daysTested": 14, "occasion": "office" },
+  "discussionId": { "$oid": "66f0c3a10000000000000002" },
+  "createdAt": { "$date": "2026-09-30T20:45:00Z" }
+}

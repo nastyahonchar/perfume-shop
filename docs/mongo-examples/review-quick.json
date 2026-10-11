@@ -1,0 +1,9 @@
+{
+  "_id": { "$oid": "66f0c2a10000000000000002" },
+  "productId": 1,
+  "productName": "Pumpkin Velours",
+  "brandName": "Maison Aurelle",
+  "author": { "userId": "u-5", "displayName": "Марко" },
+  "rating": 4,
+  "createdAt": { "$date": "2026-10-05T08:15:00Z" }
+}

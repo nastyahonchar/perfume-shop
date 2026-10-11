@@ -1,0 +1,81 @@
+Table Brands {
+  Id int [pk, increment]
+  Name nvarchar(100) [not null, unique]
+  Country nvarchar(60)
+  FoundedYear smallint
+}
+
+Table Perfumes {
+  Id int [pk, increment]
+  BrandId int [not null]
+  Name nvarchar(200) [not null]
+  Sku nvarchar(50) [not null, unique]
+  Gender nvarchar(10) [not null]
+  Concentration nvarchar(10) [not null]
+  Season nvarchar(20) [not null, default: 'AllYear']
+  VolumeMl smallint [not null]
+  Price decimal(18,2) [not null]
+  IsActive bit [not null, default: 1]
+  CreatedAt datetime2 [not null]
+  CreatedBy nvarchar(100)
+  UpdatedAt datetime2
+  UpdatedBy nvarchar(100)
+  IsDeleted bit [not null, default: 0]
+  RowVersion rowversion [not null]
+
+  indexes {
+    (BrandId, Name, VolumeMl) [unique]
+    BrandId [name: 'IX_Perfumes_BrandId']
+    Season [name: 'IX_Perfumes_Season']
+    Name [name: 'IX_Perfumes_Name']
+    (Gender, Price) [name: 'IX_Perfumes_Gender_Price']
+  }
+}
+
+Table PerfumeDetails {
+  PerfumeId int [pk]
+  Description nvarchar(2000) [not null]
+  Perfumer nvarchar(100)
+  LaunchYear smallint
+  Longevity tinyint
+}
+
+Table PerfumeImages {
+  Id int [pk, increment]
+  PerfumeId int [not null]
+  Url nvarchar(500) [not null]
+  SortOrder int [not null, default: 0]
+  IsMain bit [not null, default: 0]
+
+  indexes {
+    (PerfumeId, SortOrder) [name: 'IX_PerfumeImages_Perfume_Sort']
+  }
+}
+
+Table Notes {
+  Id int [pk, increment]
+  Name nvarchar(60) [not null, unique]
+  Family nvarchar(20) [not null]
+
+  indexes {
+    Family [name: 'IX_Notes_Family']
+  }
+}
+
+Table PerfumeNotes {
+  PerfumeId int [not null]
+  NoteId int [not null]
+  Layer nvarchar(10) [not null, note: 'Top, Heart, Base']
+  AddedAt datetime2 [not null]
+
+  indexes {
+    (PerfumeId, NoteId) [pk]
+    (NoteId, PerfumeId) [name: 'IX_PerfumeNotes_NoteId']
+  }
+}
+
+Ref: Perfumes.BrandId > Brands.Id
+Ref: PerfumeDetails.PerfumeId - Perfumes.Id
+Ref: PerfumeImages.PerfumeId > Perfumes.Id
+Ref: PerfumeNotes.PerfumeId > Perfumes.Id
+Ref: PerfumeNotes.NoteId > Notes.Id
