@@ -1,0 +1,110 @@
+Table Customers {
+  Id bigint [pk, increment]
+  Email nvarchar(256) [not null, unique]
+  FullName nvarchar(200) [not null]
+  Phone nvarchar(30)
+  CreatedAt datetime2 [not null]
+  CreatedBy nvarchar(100)
+  UpdatedAt datetime2
+  UpdatedBy nvarchar(100)
+  IsDeleted bit [not null, default: 0]
+  RowVersion rowversion [not null]
+}
+
+Table Products {
+  Id int [pk, note: 'Id з БД Каталогу, без FK між базами']
+  Name nvarchar(200) [not null, note: 'копія']
+  BrandName nvarchar(100) [not null, note: 'копія']
+  Season nvarchar(20) [not null, note: 'копія']
+  Price decimal(18,2) [not null, note: 'копія']
+  Stock int [not null, default: 0, note: 'власне поле']
+  IsActive bit [not null, default: 1]
+  SourceUpdatedAt datetime2
+  CreatedAt datetime2 [not null]
+  UpdatedAt datetime2
+  RowVersion rowversion [not null]
+
+  indexes {
+    Season [name: 'IX_Products_Season_Active']
+  }
+}
+
+Table Promotions {
+  Id int [pk, increment]
+  Name nvarchar(200) [not null, unique]
+  Season nvarchar(20) [not null]
+  DiscountPercent decimal(5,2) [not null]
+  StartsAt datetime2 [not null]
+  EndsAt datetime2 [not null]
+  IsActive bit [not null, default: 1]
+  CreatedAt datetime2 [not null]
+  CreatedBy nvarchar(100)
+  UpdatedAt datetime2
+  UpdatedBy nvarchar(100)
+
+  indexes {
+    (Season, StartsAt, EndsAt) [name: 'IX_Promotions_Season_Dates']
+  }
+}
+
+Table OrderStatusTransitions {
+  FromStatus nvarchar(30) [pk]
+  ToStatus nvarchar(30) [pk]
+}
+
+Table Orders {
+  Id bigint [pk, increment]
+  CustomerId bigint [not null]
+  Status nvarchar(30) [not null, default: 'Submitted']
+  OrderDate datetime2 [not null]
+  CreatedAt datetime2 [not null]
+  CreatedBy nvarchar(100)
+  UpdatedAt datetime2
+  UpdatedBy nvarchar(100)
+  IsDeleted bit [not null, default: 0]
+  RowVersion rowversion [not null]
+
+  indexes {
+    (CustomerId, Status) [name: 'IX_Orders_CustomerId_Status']
+    CustomerId [name: 'IX_Orders_Active']
+  }
+}
+
+Table OrderDetails {
+  OrderId bigint [pk]
+  ShippingAddress nvarchar(400) [not null]
+  Comment nvarchar(1000)
+}
+
+Table OrderItems {
+  OrderId bigint [not null]
+  ProductId int [not null]
+  ProductName nvarchar(300) [not null, note: 'знімок']
+  UnitPrice decimal(18,2) [not null, note: 'знімок']
+  Discount decimal(18,2) [not null, default: 0, note: 'знімок']
+  Units int [not null]
+
+  indexes {
+    (OrderId, ProductId) [pk]
+    ProductId [name: 'IX_OrderItems_ProductId']
+  }
+}
+
+Table OrderStatusHistory {
+  Id bigint [pk, increment]
+  OrderId bigint [not null]
+  FromStatus nvarchar(30)
+  ToStatus nvarchar(30) [not null]
+  ChangedAt datetime2 [not null]
+  ChangedBy nvarchar(100)
+
+  indexes {
+    (OrderId, ChangedAt) [name: 'IX_OSH_OrderId_ChangedAt']
+  }
+}
+
+Ref: Orders.CustomerId > Customers.Id
+Ref: OrderDetails.OrderId - Orders.Id
+Ref: OrderItems.OrderId > Orders.Id
+Ref: OrderItems.ProductId > Products.Id
+Ref: OrderStatusHistory.OrderId > Orders.Id
