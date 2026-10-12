@@ -6,7 +6,7 @@ public interface IOrderRepository : IGenericRepository<Order>
 {
     Task<Order?> GetWithItemsAsync(long orderId, CancellationToken ct = default);
 
-    Task<(IReadOnlyList<Order> Items, int TotalCount)> GetByCustomerAsync(
+    Task<(IReadOnlyList<OrderSummary> Items, int TotalCount)> GetByCustomerAsync(
         long customerId, string? status, int page, int pageSize, CancellationToken ct = default);
 
     Task AddItemAsync(long orderId, long productId, int units, CancellationToken ct = default);
