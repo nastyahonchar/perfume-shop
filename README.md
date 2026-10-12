@@ -136,7 +136,7 @@ perfume-shop/
         └── Orders.Domain/
 ```
 
-Структура `Platform.slnx`, `Platform.AppHost` і `Services/Orders` описує організацію рішення Лабораторної роботи № 02.
+`Platform.slnx`, `Platform.AppHost` і `Services/Orders` — рішення Лабораторної роботи № 02.
 
 ## Лабораторна робота № 01: бази даних
 
@@ -200,7 +200,7 @@ mongosh "mongodb://localhost:27017/PerfumeReviewsDb" --file db/p3/queries.js
 
 ### Призначення
 
-Orders API надає HTTP-інтерфейс для роботи з клієнтами, локальною копією товарного довідника та замовленнями. Бізнес-операції реалізовано в BLL, а SQL-доступ винесено в DAL. Для роботи з даними використовуються чистий ADO.NET і Dapper.
+Orders API надає HTTP-інтерфейс для роботи з клієнтами, товарами та замовленнями. Назва, ціна й сезон товару є копією з контексту «Каталог», тому через API змінюється лише залишок (`PUT /api/products/{id}/stock`). Бізнес-операції реалізовано в BLL, SQL-доступ винесено в DAL (чистий ADO.NET і Dapper).
 
 ### Основні компоненти
 
@@ -221,45 +221,66 @@ Orders API надає HTTP-інтерфейс для роботи з клієн�
 - SQL-запити виконуються в DAL; значення передаються як параметри, а не конкатенуються з текстом SQL.
 - Операції доступу до бази виконуються асинхронно.
 
+### Технології
+
+| Компонент | Версія |
+|---|---|
+| .NET | 9 |
+| .NET Aspire (AppHost) | 9.5.2 |
+| Dapper | 2.1.89 |
+| Microsoft.Data.SqlClient | 7.1.1 |
+| AutoMapper | 14.0.0 (ліцензійний ключ не потрібен) |
+| Serilog.AspNetCore | 10.0.0 |
+| Swashbuckle.AspNetCore | 9.0.6 |
+
 ### Транзакції та конкурентність
 
-Під час транзакційної бізнес-операції Unit of Work відкриває транзакцію, репозиторії виконують потрібні зміни, після успіху викликається `Commit`, а в разі помилки — `Rollback`.
+Транзакційна операція виконується так: Unit of Work відкриває транзакцію, репозиторії виконують зміни, після успіху викликається `Commit`, у разі помилки — `Rollback`. Транзакційні сценарії: створення замовлення (`POST /api/orders`: перевірка клієнта, перевірка товарів і додавання позицій у трьох репозиторіях), підтвердження замовлення і зміна статусу.
 
-У реалізації використовується рівень ізоляції `ReadCommitted`. Він забезпечує читання лише зафіксованих даних і є компромісом між узгодженістю та блокуваннями. Вищі рівні ізоляції можуть зменшувати кількість аномалій читання, але збільшують блокування й ризик deadlock. Процедура підтвердження використовує блокування рядка замовлення, щоб запобігти одночасному повторному підтвердженню; `RowVersion`, якщо він використовується в конкретній операції, призначений для виявлення конкурентних змін.
+Рівень ізоляції — `ReadCommitted`: операція читає лише зафіксовані дані, а блокування короткі. Вищі рівні (`RepeatableRead`, `Serializable`) дають менше аномалій читання, але більше блокувань і ризик взаємних блокувань (deadlock). Таймаут команд — 30 с (значення `SqlCommand` за замовчуванням).
+
+Підхід до конкурентності — песимістичний: збережувані процедури блокують рядок замовлення через `UPDLOCK`, тому два одночасні підтвердження одного замовлення виконуються по черзі. Колонка `RowVersion` з Лаб. 01 у цьому сервісі не перевіряється.
+
+Процедури мають `SET XACT_ABORT ON`, тому при помилці (наприклад, нестача залишку) сервер сам відкочує всю транзакцію. `UnitOfWork.RollbackAsync` це враховує і не намагається відкотити транзакцію вдруге.
 
 ### Валідація та обробка помилок
 
-Базова перевірка вхідних DTO виконується на рівні API за допомогою DataAnnotations. Правила, для яких потрібні дані з бази або перевірка стану замовлення, реалізуються в BLL.
+Перший рівень валідації — DataAnnotations на DTO (обов'язкові поля, діапазони, формат email): некоректний запит відхиляється з `400` ще до виклику сервісу. Другий рівень — BLL: правила, яким потрібен стан бази (клієнт існує, товар існує й активний, статус дозволений, email не дублюється).
 
-Глобальний обробник винятків повертає помилки у форматі `ProblemDetails`:
+Помилки збережуваних процедур перетворюються на доменні винятки в DAL (`SqlErrorTranslator`), а глобальний обробник `DomainExceptionHandler` повертає їх у форматі `ProblemDetails`:
 
-| HTTP-статус | Значення |
-|---|---|
-| `400 Bad Request` | Некоректний запит або помилка валідації |
-| `404 Not Found` | Запитаний ресурс не знайдено |
-| `409 Conflict` | Бізнес-конфлікт: недопустимий перехід статусу, нестача залишку або конфлікт унікальності |
-| `500 Internal Server Error` | Непередбачена внутрішня помилка |
-
-Внутрішні SQL-повідомлення та чутливі дані не повинні повертатися клієнту. Для діагностики використовується журналювання та ідентифікатор запиту.
+| Виняток | HTTP-статус | Приклад |
+|---|---|---|
+| `ValidationException` та помилки DataAnnotations | `400 Bad Request` | порожній email, невідомий статус |
+| `NotFoundException` | `404 Not Found` | замовлення чи клієнта з таким Id немає |
+| `BusinessConflictException` | `409 Conflict` | недопустимий перехід статусу, нестача залишку, дубль email |
+| інші винятки | `500 Internal Server Error` | клієнту повертається загальний опис, деталі пишуться в лог |
 
 ## Запуск через .NET Aspire
 
 ### Передумови
 
-- .NET SDK версії, зазначеної у файлах рішення (для проєкту, налаштованого на .NET 9, потрібен відповідний .NET 9 SDK).
-- Visual Studio 2022 із навантаженням **ASP.NET and web development** або .NET CLI.
-- SQL Server LocalDB чи інший локальний SQL Server; для контейнерного варіанта — Docker Desktop.
-- NuGet-пакети проєкту, зокрема пакети Aspire, ADO.NET, Dapper, Swagger і AutoMapper.
+- .NET 9 SDK (перевірка: `dotnet --list-sdks`).
+- Visual Studio 2022 (17.14 або новіша) із навантаженням **ASP.NET and web development** або .NET CLI.
+- SQL Server LocalDB або інший локальний SQL Server.
+- Docker Desktop — лише для варіанта з SQL Server у контейнері.
 
-Перевірте наявні SDK:
+### Два режими бази даних
+
+Режим вибирає параметр `UseSqlContainer` у `Platform.AppHost/appsettings.json`.
+
+| Режим | `UseSqlContainer` | База |
+|---|---|---|
+| Існуюча база (за замовчуванням) | `false` | Підключення до `PerfumeOrdersDb` за рядком `ConnectionStrings:OrdersDb` із `Platform.AppHost/appsettings.json` (за замовчуванням LocalDB) |
+| SQL Server у контейнері | `true` | Aspire створює контейнер із томом даних і порожню базу `PerfumeOrdersDb` |
+
+**Підготовка бази.** В обох режимах до бази потрібно застосувати `db/p1/schema.sql`, `db/p1/procedures.sql` і `db/p1/seed.sql` (у SSMS або через `sqlcmd`). У режимі контейнера адресу й порт SQL Server видно в Aspire Dashboard, порожній контейнер таблиць не містить. У режимі існуючої бази достатньо один раз виконати ці скрипти на своєму SQL Server.
+
+Увімкнути контейнер без редагування файлу можна змінною оточення:
 
 ```powershell
-dotnet --list-sdks
+$env:UseSqlContainer = "true"
 ```
-
-### Підготовка бази
-
-Якщо використовуєте уже створену локальну базу, спочатку виконайте SQL-скрипти `db/p1`, описані вище. Якщо Aspire запускає новий SQL Server у контейнері, застосуйте до нього `schema.sql`, `procedures.sql` і `seed.sql` із `db/p1`. Порожній контейнер сам по собі не містить таблиць і тестових даних.
 
 ### Запуск усієї системи
 
@@ -269,39 +290,25 @@ dotnet --list-sdks
 dotnet run --project Platform.AppHost
 ```
 
-Після запуску відкрийте посилання на **Aspire Dashboard**, яке з'явиться в консолі. Переконайтесь, що API та ресурс SQL Server мають статус `Running`. Адресу API беріть з розділу **Endpoints** у Dashboard і відкривай Swagger за шляхом `/swagger`.
+Aspire Dashboard відкривається за адресою з консолі (за замовчуванням `https://localhost:17062`). У ньому API `orders-api` і ресурс бази мають статус `Running`. Адресу API беріть з колонки **Endpoints**, Swagger доступний за шляхом `/swagger`.
 
-Якщо назва проєкту AppHost у вашому рішенні інша, замініть шлях у команді на фактичний `.csproj`.
+### Рядок підключення
 
-### Налаштування рядка підключення
-
-Рядок підключення зберігається в конфігурації й може бути перевизначений змінною середовища. Для ключа `ConnectionStrings:OrdersDb` відповідна змінна має вигляд:
+Рядок підключення зберігається в `appsettings.json` і перевизначається змінною оточення (подвійне підкреслення замість двокрапки):
 
 ```powershell
-$env:ConnectionStrings__OrdersDb = "Server=...;Database=PerfumeOrdersDb;..."
+$env:ConnectionStrings__OrdersDb = "Server=localhost;Database=PerfumeOrdersDb;Trusted_Connection=True;TrustServerCertificate=True"
 ```
 
-Не додавайте паролі, ліцензійні ключі або інші секрети в репозиторій. Використовуйте User Secrets або змінні середовища.
+Паролі й інші секрети в репозиторій не додаються.
 
 ### Запуск API без Aspire
 
-Для локального налагодження можна запустити API напряму:
-
 ```powershell
-dotnet run --project Services/Orders/Orders.Api
+dotnet run --project Services/Orders/Orders.Api --launch-profile https
 ```
 
-Рядок підключення в цьому режимі має вказувати на доступний SQL Server із розгорнутою базою `PerfumeOrdersDb`. Точний URL Swagger визначається конфігурацією запуску та виводом консолі.
-
-### AutoMapper
-
-Якщо в проєкті використовується AutoMapper 15 і налаштовано ліцензійний ключ, збережіть його локально через User Secrets, а не у файлі конфігурації, який комітиться:
-
-```powershell
-dotnet user-secrets set "AutoMapper:LicenseKey" "<ваш-ключ>" --project Services/Orders/Orders.Api
-```
-
-Виконуйте цю команду лише якщо проєкт справді очікує цей параметр і у вас є потрібний ключ.
+API стартує на `https://localhost:7130`, Swagger — `https://localhost:7130/swagger`. Рядок підключення береться з `Services/Orders/Orders.Api/appsettings.json` (за замовчуванням LocalDB) або зі змінної оточення `ConnectionStrings__OrdersDb`.
 
 ## Ендпоінти API
 
@@ -312,7 +319,7 @@ dotnet user-secrets set "AutoMapper:LicenseKey" "<ваш-ключ>" --project Se
 | `GET` | `/api/customers/{id}` | Отримати клієнта за ID | `200`, `404` |
 | `POST` | `/api/customers` | Створити клієнта | `201`, `400`, `409` |
 | `PUT` | `/api/customers/{id}` | Оновити клієнта | `200`, `400`, `404`, `409` |
-| `DELETE` | `/api/customers/{id}` | Видалити клієнта | `204`, `404`, `409` |
+| `DELETE` | `/api/customers/{id}` | Видалити клієнта (м'яке видалення) | `204`, `404` |
 | `GET` | `/api/products` | Отримати товари; можливий фільтр `season` | `200`, `400` |
 | `GET` | `/api/products/{id}` | Отримати товар за ID | `200`, `404` |
 | `PUT` | `/api/products/{id}/stock` | Змінити залишок | `200`, `400`, `404` |
@@ -324,84 +331,85 @@ dotnet user-secrets set "AutoMapper:LicenseKey" "<ваш-ключ>" --project Se
 | `PUT` | `/api/orders/{id}/status` | Змінити статус із перевіркою переходу | `204`, `400`, `404`, `409` |
 | `DELETE` | `/api/orders/{id}` | Видалити замовлення за дозволених статусів | `204`, `404`, `409` |
 
-Створення ресурсу має повертати `201 Created` із заголовком `Location`. Операції без тіла відповіді можуть повертати `204 No Content`.
+Створення ресурсу повертає `201 Created` із заголовком `Location`. Операції без тіла відповіді (`confirm`, зміна статусу, видалення) повертають `204 No Content`. Помилки валідації тіла запиту (`POST` і `PUT`) повертають `400`.
 
 ## Приклади запитів
 
-Візьміть фактичну адресу API з Aspire Dashboard. У прикладах нижче `BASE` — змінна з базовою адресою API.
-
-### PowerShell
+`BASE` — адреса API: з Aspire Dashboard (колонка **Endpoints**) або `https://localhost:7130` при запуску API напряму.
 
 ```powershell
 $BASE = "https://localhost:7130"
 
-# Отримати клієнтів
+# список клієнтів
 Invoke-RestMethod -Method Get -Uri "$BASE/api/customers"
 
-# Створити клієнта
+# створити клієнта
 $body = @{
-    email = "test@example.com"
+    email    = "test@example.com"
     fullName = "Test User"
-    phone = "+380501112233"
+    phone    = "+380501112233"
 } | ConvertTo-Json
 
-Invoke-RestMethod -Method Post `
-    -Uri "$BASE/api/customers" `
-    -ContentType "application/json" `
-    -Body $body
+Invoke-RestMethod -Method Post -Uri "$BASE/api/customers" -ContentType "application/json" -Body $body
 
-# Отримати товари зимового сезону
+# товари зимового сезону
 Invoke-RestMethod -Method Get -Uri "$BASE/api/products?season=Winter"
 
-# Отримати замовлення клієнта з пагінацією
-Invoke-RestMethod -Method Get `
-    -Uri "$BASE/api/customers/1/orders?status=Submitted&page=1&pageSize=10"
+# замовлення клієнта 1 зі статусом Paid, перша сторінка
+Invoke-RestMethod -Method Get -Uri "$BASE/api/customers/1/orders?status=Paid&page=1&pageSize=10"
+
+# одне замовлення з позиціями
+Invoke-RestMethod -Method Get -Uri "$BASE/api/orders/1"
 ```
 
-### Створення замовлення
-
-Приклад тіла запиту — використовуйте його лише після перевірки назв полів у `CreateOrderDto` та Swagger:
+Створення замовлення (`POST /api/orders`). Позиція фіксує назву, ціну й сезонну знижку на момент замовлення:
 
 ```json
 {
   "customerId": 1,
-  "shippingAddress": "Chernivtsi, Holovna 1",
+  "shippingAddress": "Kyiv, Khreshchatyk 1",
+  "comment": "Подарункова упаковка",
   "items": [
-    {
-      "productId": 1,
-      "units": 2
-    },
-    {
-      "productId": 2,
-      "units": 1
-    }
+    { "productId": 1, "units": 2 },
+    { "productId": 2, "units": 1 }
   ]
 }
 ```
 
-Надішліть JSON на `POST /api/orders`. У разі успіху очікується `201 Created` із посиланням на створене замовлення. Якщо клієнта або товар не знайдено, або бізнес-правила порушено, API має повернути відповідний статус помилки.
-
-### Підтвердження замовлення
+Підтвердження замовлення і зміна статусу:
 
 ```powershell
-Invoke-RestMethod -Method Post -Uri "$BASE/api/orders/1/confirm"
+Invoke-RestMethod -Method Post -Uri "$BASE/api/orders/3/confirm"
+
+$status = @{ status = "Paid" } | ConvertTo-Json
+Invoke-RestMethod -Method Put -Uri "$BASE/api/orders/3/status" -ContentType "application/json" -Body $status
 ```
 
-Повторне підтвердження того самого замовлення має бути відхилене, якщо поточний статус не дозволяє цю операцію.
-
-### Приклад помилки ProblemDetails
-
-Форма відповіді залежить від глобального обробника, але може містити такі поля:
+Приклад відповіді `409 Conflict` на повторне підтвердження замовлення (`POST /api/orders/2/confirm`):
 
 ```json
 {
-  "title": "Business rule conflict",
   "status": 409,
-  "detail": "The requested operation conflicts with the current order state.",
-  "instance": "/api/orders/1/confirm",
-  "traceId": "..."
+  "title": "Business rule conflict",
+  "detail": "Stock can be confirmed only for a new order",
+  "instance": "/api/orders/2/confirm",
+  "traceId": "0HN..."
 }
 ```
+
+## Перевірка обробки помилок і транзакцій
+
+Сценарії зручно виконувати у Swagger (`/swagger`), бо Swagger показує код і тіло відповіді. Для свіжої бази після `seed.sql`: замовлення 1 має статус `Paid`, 2 — `StockConfirmed`, 3 — `Submitted`.
+
+| Сценарій | Запит | Очікуваний результат |
+|---|---|---|
+| Спецсимволи в параметрі | `POST /api/customers` з `fullName` = `Conor O'Brien` | `201`, помилки SQL немає: значення передається параметром |
+| Валідація DTO | `POST /api/customers` з `email` = `not-an-email` | `400` у форматі ProblemDetails з переліком полів |
+| Неіснуючий Id | `GET /api/orders/9999` | `404`, а не `500` |
+| Повторне підтвердження | `POST /api/orders/2/confirm` | `409`, ProblemDetails |
+| Недопустимий перехід | `PUT /api/orders/3/status` зі статусом `Shipped` | `409`: неоплачене замовлення відвантажити не можна |
+| Відкат при створенні замовлення | `POST /api/orders` для клієнта 1 з двома позиціями: `productId` 1 і `productId` 99999 | `404` (другого товару немає); у `GET /api/customers/1/orders` кількість замовлень не змінилась, бо створене замовлення і перша позиція відкотились |
+| Відкат при нестачі залишку | `PUT /api/products/7/stock` зі `stock` = 1, потім `POST /api/orders/3/confirm` | `409`; у `GET /api/products/3` залишок не змінився; після перевірки поверніть залишок товару 7 до 14 |
 
 ## Git-процес
 
@@ -410,4 +418,3 @@ Invoke-RestMethod -Method Post -Uri "$BASE/api/orders/1/confirm"
 - `main` — стабільна версія проєкту;
 - `develop` — інтеграційна гілка;
 - `feature/lab-02-orders-service` — зміни для Лабораторної роботи № 02.
-
