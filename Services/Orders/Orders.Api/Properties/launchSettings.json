@@ -11,6 +11,7 @@
       }
     },
     "https": {
+      "launchUrl": "swagger",
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": false,
