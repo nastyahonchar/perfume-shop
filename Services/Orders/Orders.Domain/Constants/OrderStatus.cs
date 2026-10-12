@@ -8,4 +8,7 @@ public static class OrderStatus
     public const string Paid = "Paid";
     public const string Shipped = "Shipped";
     public const string Cancelled = "Cancelled";
+
+    public static readonly string[] All =
+        { Submitted, AwaitingValidation, StockConfirmed, Paid, Shipped, Cancelled };
 }
