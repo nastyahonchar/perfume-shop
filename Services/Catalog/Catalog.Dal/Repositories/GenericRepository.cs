@@ -37,7 +37,4 @@ public class GenericRepository<T> : IGenericRepository<T> where T : class
         => await SpecificationEvaluator.Default
             .GetQuery(Set.AsQueryable(), specification, evaluateCriteriaOnly: true)
             .CountAsync(ct);
-
-    public Task<int> SaveChangesAsync(CancellationToken ct = default)
-        => Context.SaveChangesAsync(ct);
 }

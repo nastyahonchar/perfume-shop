@@ -12,6 +12,4 @@ public interface IGenericRepository<T> where T : class
 
     Task<IReadOnlyList<T>> ListAsync(ISpecification<T> specification, CancellationToken ct = default);
     Task<int> CountAsync(ISpecification<T> specification, CancellationToken ct = default);
-
-    Task<int> SaveChangesAsync(CancellationToken ct = default);
 }

@@ -7,6 +7,7 @@ namespace Catalog.Api.Middleware;
 
 public sealed class DomainExceptionHandler(
     IProblemDetailsService problemDetails,
+    IHostEnvironment env,
     ILogger<DomainExceptionHandler> logger) : IExceptionHandler
 {
     public async ValueTask<bool> TryHandleAsync(
@@ -30,9 +31,9 @@ public sealed class DomainExceptionHandler(
 
         var detail = ex switch
         {
-            DbUpdateConcurrencyException => "The record was changed by someone else. Reload it and try again",
-            DbUpdateException => "The operation violates a data constraint",
-            _ when status == StatusCodes.Status500InternalServerError => "An unexpected error occurred",
+            DbUpdateConcurrencyException => Details(ex, "The record was changed by someone else. Reload it and try again"),
+            DbUpdateException => Details(ex, "The operation violates a data constraint"),
+            _ when status == StatusCodes.Status500InternalServerError => Details(ex, "An unexpected error occurred"),
             _ => ex.Message
         };
 
@@ -51,4 +52,7 @@ public sealed class DomainExceptionHandler(
             Exception = ex
         });
     }
+
+    private string Details(Exception ex, string generic)
+        => env.IsDevelopment() ? ex.GetBaseException().Message : generic;
 }

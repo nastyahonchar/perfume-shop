@@ -64,8 +64,8 @@ app.Use(async (ctx, next) =>
     }
 });
 
-app.UseExceptionHandler();
 app.UseSerilogRequestLogging();
+app.UseExceptionHandler();
 
 if (app.Environment.IsDevelopment())
 {

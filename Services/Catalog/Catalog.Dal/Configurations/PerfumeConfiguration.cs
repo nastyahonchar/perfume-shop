@@ -25,7 +25,7 @@ public class PerfumeConfiguration : IEntityTypeConfiguration<Perfume>
         builder.Property(p => p.Gender).IsRequired().HasMaxLength(10);
         builder.Property(p => p.Concentration).IsRequired().HasMaxLength(10);
         builder.Property(p => p.Season).IsRequired().HasMaxLength(20).HasDefaultValue(Seasons.AllYear);
-        builder.Property(p => p.Price).HasPrecision(18, 2);
+        builder.Property(p => p.Price).HasPrecision(18, 2).HasColumnType("decimal(18,2)");
         builder.Property(p => p.CreatedAt).HasDefaultValueSql("SYSUTCDATETIME()");
         builder.Property(p => p.CreatedBy).HasMaxLength(100);
         builder.Property(p => p.UpdatedBy).HasMaxLength(100);
