@@ -1,6 +1,6 @@
 # Nota — інтернет-магазин парфумів
 
-Навчальний проєкт з дисципліни «Технології .NET розробки Web-додатків». Проєкт розвивається в межах двох лабораторних робіт: проєктування баз даних для мікросервісної архітектури (Лаб. 01) та розробка тришарового Web API на ADO.NET і Dapper (Лаб. 02).
+Навчальний проєкт з дисципліни «Технології .NET розробки Web-додатків». Проєкт розвивається в межах лабораторних робіт: проєктування баз даних для мікросервісної архітектури (Лаб. 01), тришаровий Web API на ADO.NET і Dapper (Лаб. 02) та тришаровий Web API на Entity Framework Core (Лаб. 03).
 
 ## Зміст
 
@@ -15,6 +15,11 @@
 - [Ендпоінти API](#ендпоінти-api)
 - [Приклади запитів](#приклади-запитів)
 - [Перевірка обробки помилок і транзакцій](#перевірка-обробки-помилок-і-транзакцій)
+- [Лабораторна робота № 03: Catalog API](#лабораторна-робота--03-catalog-api)
+- [Запуск Catalog API](#запуск-catalog-api)
+- [Ендпоінти Catalog API](#ендпоінти-catalog-api)
+- [Приклади запитів до Catalog API](#приклади-запитів-до-catalog-api)
+- [Перевірка Catalog API](#перевірка-catalog-api)
 - [Git-процес](#git-процес)
 
 ## Опис предметної області
@@ -31,7 +36,7 @@ Nota — інтернет-магазин парфумерії. Покупці п
 | 2 | Каталог (Catalog) | `PerfumeCatalogDb` | SQL Server, EF Core | `Brands`, `Perfumes`, `PerfumeDetails`, `PerfumeImages`, `Notes`, `PerfumeNotes` |
 | 3 | Відгуки (Reviews) | `PerfumeReviewsDb` | MongoDB | `reviews`, `discussions`, `discussionMessages`, `ratingSummaries` |
 
-У межах Лабораторної роботи № 02 реалізується контекст **Orders** як окрема вертикаль — від доступу до бази даних до HTTP API.
+У межах Лабораторної роботи № 02 реалізовано контекст **Orders**, а в Лабораторній роботі № 03 — контекст **Catalog**. Кожен із них є окремою вертикаллю від доступу до бази даних до HTTP API з однаковою тришаровою будовою.
 
 ### Тришарова архітектура Orders
 
@@ -129,14 +134,19 @@ perfume-shop/
 ├── Platform.slnx
 ├── Platform.AppHost/
 └── Services/
-    └── Orders/
-        ├── Orders.Api/
-        ├── Orders.Bll/
-        ├── Orders.Dal/
-        └── Orders.Domain/
+    ├── Orders/
+    │   ├── Orders.Api/
+    │   ├── Orders.Bll/
+    │   ├── Orders.Dal/
+    │   └── Orders.Domain/
+    └── Catalog/
+        ├── Catalog.Api/
+        ├── Catalog.Bll/
+        ├── Catalog.Dal/
+        └── Catalog.Domain/
 ```
 
-`Platform.slnx`, `Platform.AppHost` і `Services/Orders` — рішення Лабораторної роботи № 02.
+`Platform.slnx`, `Platform.AppHost` і `Services/Orders` — рішення Лабораторної роботи № 02; `Services/Catalog` додано в Лабораторній роботі № 03.
 
 ## Лабораторна робота № 01: бази даних
 
@@ -158,6 +168,8 @@ perfume-shop/
 6. `db/p2/seed.sql` — початкові довідники та тестові дані.
 
 Seed-скрипти розраховані на повторний запуск без створення дублікатів.
+
+Скрипти `db/p2` — рішення Лабораторної роботи № 01. Для запуску Catalog API (Лаб. 03) базу `PerfumeCatalogDb` створюють міграції EF Core, див. [Запуск Catalog API](#запуск-catalog-api).
 
 ### Розгортання MongoDB
 
@@ -220,6 +232,7 @@ Orders API надає HTTP-інтерфейс для роботи з клієн�
 - `UnitOfWork` координує репозиторії через спільне з'єднання й транзакцію.
 - SQL-запити виконуються в DAL; значення передаються як параметри, а не конкатенуються з текстом SQL.
 - Операції доступу до бази виконуються асинхронно.
+- Знімок позиції замовлення (`ProductName`, `UnitPrice`, `Discount`) записує збережувана процедура `usp_AddOrderItem` у тій самій транзакції, що й створення замовлення; `POST /api/orders` повертає ці значення в `items`.
 
 ### Технології
 
@@ -362,6 +375,24 @@ Invoke-RestMethod -Method Get -Uri "$BASE/api/customers/1/orders?status=Paid&pag
 Invoke-RestMethod -Method Get -Uri "$BASE/api/orders/1"
 ```
 
+### curl і Postman
+
+`curl.exe` (а не `curl`, який у PowerShell є псевдонімом `Invoke-WebRequest`). Параметр `-k` потрібен для локального сертифіката розробки, `-i` показує код і заголовки відповіді.
+
+```powershell
+# список товарів зимового сезону
+curl.exe -k -i "$BASE/api/products?season=Winter"
+
+# підтвердити замовлення (відповідь 204 або 409)
+curl.exe -k -i -X POST "$BASE/api/orders/2/confirm"
+
+# створити клієнта: JSON передається з файлу, щоб не мучитись з лапками в PowerShell
+[System.IO.File]::WriteAllText("body.json", '{"email":"test@example.com","fullName":"Test User"}')
+curl.exe -k -i -X POST "$BASE/api/customers" -H "Content-Type: application/json" --data-binary "@body.json"
+```
+
+Postman: **Import** → **Link**, вставити `<BASE>/swagger/v1/swagger.json` (де `<BASE>` — адреса API). У колекції з'являться всі ендпоінти з прикладами тіл запитів.
+
 Створення замовлення (`POST /api/orders`). Позиція фіксує назву, ціну й сезонну знижку на момент замовлення:
 
 ```json
@@ -411,10 +442,280 @@ Invoke-RestMethod -Method Put -Uri "$BASE/api/orders/3/status" -ContentType "app
 | Відкат при створенні замовлення | `POST /api/orders` для клієнта 1 з двома позиціями: `productId` 1 і `productId` 99999 | `404` (другого товару немає); у `GET /api/customers/1/orders` кількість замовлень не змінилась, бо створене замовлення і перша позиція відкотились |
 | Відкат при нестачі залишку | `PUT /api/products/7/stock` зі `stock` = 1, потім `POST /api/orders/3/confirm` | `409`; у `GET /api/products/3` залишок не змінився; після перевірки поверніть залишок товару 7 до 14 |
 
+## Лабораторна робота № 03: Catalog API
+
+### Призначення
+
+Catalog API — сервіс каталогу парфумів: бренди, ноти й самі парфуми. Він підтримує фільтрацію за брендом, сезоном, статтю, ціною та нотами піраміди, сортування й пагінацію. Доступ до даних реалізовано на Entity Framework Core (Code First): модель описана в коді, а схема бази створюється міграціями. Сервіс є власником даних про ціну, назву, бренд і сезон парфуму; інші контексти зберігають їхні копії (див. політику дублювання).
+
+### Основні компоненти
+
+| Компонент | Відповідальність |
+|---|---|
+| `Catalog.Api` | Контролери, маршрутизація, Swagger, Serilog, централізована обробка помилок, запуск міграцій і сідінгу |
+| `Catalog.Bll` | Сервіси, DTO, AutoMapper, валідатори FluentValidation, специфікації |
+| `Catalog.Dal` | `CatalogDbContext`, конфігурації Fluent API, міграції, репозиторії, Unit of Work, сідінг |
+| `Catalog.Domain` | Сутності з бізнес-правилами, константи, доменні винятки |
+
+### Технології
+
+| Компонент | Версія |
+|---|---|
+| .NET | 9 |
+| Microsoft.EntityFrameworkCore.SqlServer, Microsoft.EntityFrameworkCore.Design | 9.0.x |
+| Ardalis.Specification.EntityFrameworkCore | 9.3.1 |
+| AutoMapper | 14.0.0 |
+| FluentValidation.DependencyInjectionExtensions | остання стабільна |
+| Serilog.AspNetCore | 10.0.0 |
+| Swashbuckle.AspNetCore | 9.0.6 |
+
+### Модель даних
+
+Сутності: `Brand`, `Perfume`, `PerfumeDetail`, `PerfumeImage`, `Note`, `PerfumeNote`. Схема збігається зі схемою `db/p2`.
+
+| Тип зв'язку | Сутності |
+|---|---|
+| 1:1 | `Perfume` ↔ `PerfumeDetail` (ключ `PerfumeId` є водночас зовнішнім) |
+| 1:N | `Brand` → `Perfume`, `Perfume` → `PerfumeImage` |
+| M:N | `Perfume` ↔ `Note` через явну проміжну сутність `PerfumeNote` із власними полями `Layer` (верхня нота, серце, база) та `AddedAt` і складеним ключем `(PerfumeId, NoteId)` |
+
+Бізнес-правила живуть у самій сутності `Perfume`: закриті сеттери, перевірки в конструкторі (бренд, обсяг і ціна додатні, стать, концентрація й сезон зі списку допустимих значень) та методи `ChangePrice`, `Rename`, `ChangeSeason`, `Activate`, `Deactivate`, `MarkDeleted`, `SetDetail`, `AddImage`, `AddNote`.
+
+Конфігурація Fluent API розділена на класи `IEntityTypeConfiguration<T>` (по одному на сутність) і підключається централізовано через `ApplyConfigurationsFromAssembly`. Вона задає назви таблиць, ключі, довжини рядків, `decimal(18,2)`, CHECK-обмеження, унікальні та фільтровані індекси, `rowversion` і поведінку каскадів: `Cascade` для частин агрегату, `Restrict` для брендів і нот з пов'язаними записами.
+
+### Міграції
+
+Міграції лежать у `Services/Catalog/Catalog.Dal/Migrations`: `InitialCreate` (схема) і `SeedReferenceData` (довідники). SQL-скрипт початкової міграції: `Migrations/InitialCreate.sql`.
+
+```powershell
+dotnet tool install --global dotnet-ef --version "9.0.*"
+
+# нова міграція
+dotnet ef migrations add <Name> --project Services/Catalog/Catalog.Dal --startup-project Services/Catalog/Catalog.Api
+
+# застосувати до бази
+dotnet ef database update --project Services/Catalog/Catalog.Dal --startup-project Services/Catalog/Catalog.Api
+
+# SQL-скрипт міграцій
+dotnet ef migrations script --project Services/Catalog/Catalog.Dal --startup-project Services/Catalog/Catalog.Api
+```
+
+Проєкт `Catalog.Dal` містить `DbContext`, а `Catalog.Api` — рядок підключення, тому в командах вказано обидва проєкти. Застосунок також сам застосовує міграції під час запуску (`MigrateAsync`).
+
+### Репозиторії та Unit of Work
+
+`GenericRepository<T>` — асинхронний універсальний репозиторій на `DbSet<T>`. Три специфічні репозиторії демонструють три способи читання пов'язаних даних:
+
+| Репозиторій | Спосіб | Кількість SQL-запитів |
+|---|---|---|
+| `PerfumeRepository.GetWithDetailsAsync` | Eager Loading (`Include`/`ThenInclude`): бренд, деталі, фото й ноти парфуму | 1 |
+| `NoteRepository.GetWithPerfumesAsync` | Explicit Loading (`Entry().Collection().LoadAsync()`): нота, потім її парфуми | 2 |
+| `PerfumeNoteRepository` | LINQ to Entities через проміжну сутність: парфуми за нотою (і рівнем піраміди), парфуми з усіма вибраними нотами | 1 |
+
+`UnitOfWork` об'єднує репозиторії, а зміни записує єдиний виклик `SaveChangesAsync()` в одній транзакції. Репозиторії лише додають, змінюють і видаляють сутності в контексті.
+
+### BLL: DTO, AutoMapper, валідація
+
+Сервіси працюють лише через Unit of Work і не звертаються до EF напряму. DTO описують контракти API, AutoMapper перетворює сутності на DTO.
+
+Валідація має два рівні, що не дублюють одне одного. DataAnnotations на DTO перевіряють прості правила (обов'язкові поля, довжина, діапазон). FluentValidation перевіряє складніші (формат SKU, допустимі значення, унікальність нот у запиті, `MinPrice` не більша за `MaxPrice`) і викликається в контролерах явно. Помилки повертаються у форматі `ValidationProblemDetails`. Правила, яким потрібні дані з бази (унікальність SKU, існування бренду й нот), перевіряє BLL.
+
+### Пагінація, фільтрація й сортування
+
+`GET /api/perfumes` приймає такі параметри:
+
+| Параметр | Значення |
+|---|---|
+| `page` | номер сторінки, з 1 (за замовчуванням 1) |
+| `pageSize` | розмір сторінки, 1–100 (за замовчуванням 20) |
+| `search` | частина назви парфуму або бренду |
+| `brandId` | Id бренду |
+| `season` | `Spring`, `Summer`, `Autumn`, `Winter`, `AllYear` |
+| `gender` | `Women`, `Men`, `Unisex` |
+| `minPrice`, `maxPrice` | межі ціни |
+| `notes` | назва ноти; параметр можна повторити, парфум має містити **усі** вказані ноти |
+| `sortBy`, `sortDir` | `name` або `price`; `asc` або `desc` |
+
+Відповідь містить `items`, `totalCount`, `page`, `pageSize`, `totalPages`, `hasNext`, `hasPrevious`; метадані також повертаються в заголовках `X-Total-Count`, `X-Page`, `X-Page-Size`, `X-Total-Pages`. Фільтрація, сортування й пагінація виконуються на рівні SQL: умови, `OFFSET`/`FETCH` і `COUNT` будує специфікація, у пам'ять завантажується лише потрібна сторінка.
+
+### Specification pattern
+
+Критерії вибірки (`Where`, `Include`, сортування, `Skip`/`Take`) винесено в класи специфікацій на `Ardalis.Specification`: `PerfumesFilterSpec` (каталог з фільтрами), `PerfumesByIdsSpec` і `BrandByNameSpec`. Репозиторій приймає специфікацію методами `ListAsync` і `CountAsync`. Для підрахунку `totalCount` береться лише умова відбору без пагінації та сортування. Нова специфікація не потребує змін у репозиторії.
+
+### Сідінг
+
+Сідінг ідемпотентний і складається з двох частин:
+
+- `HasData` (модельний сідінг): 5 брендів і 28 нот з фіксованими Id входять у міграцію `SeedReferenceData`;
+- програмний сідінг (`DbInitializer`) після `MigrateAsync()`: 10 парфумів з деталями, фото й нотами. Якщо парфуми вже є, нічого не додається. У production сідінг вимкнено. Id парфумів фіксовані (1–10) і збігаються з `Products.Id` у базі Замовлень та `productId` у MongoDB.
+
+### Обробка помилок і журнал
+
+Глобальний обробник `DomainExceptionHandler` повертає помилки у форматі `ProblemDetails` і логує кожен виняток один раз:
+
+| Виняток | HTTP-статус |
+|---|---|
+| `EntityNotFoundException` | `404 Not Found` |
+| `ValidationException` та помилки валідації DTO | `400 Bad Request` |
+| `ConflictException`, `DomainException` | `409 Conflict` |
+| `DbUpdateConcurrencyException`, `DbUpdateException` | `409 Conflict` (деталі помилки бази клієнту не віддаються) |
+| інші винятки | `500 Internal Server Error` |
+
+Журнал Serilog структурований: кожен запис має властивості `CorrelationId` (з заголовка `X-Correlation-Id` або `TraceIdentifier`) і `RequestPath`. Рівні задаються в `appsettings.json`. SQL-команди EF Core видно в консолі (`Microsoft.EntityFrameworkCore.Database.Command` на рівні `Information`), тому можна переконатися, що Eager Loading виконує один запит, а Explicit Loading — два.
+
+## Запуск Catalog API
+
+### Передумови
+
+- .NET 9 SDK, SQL Server LocalDB або інший локальний SQL Server.
+- Інструмент `dotnet-ef` версії 9.0.x для роботи з міграціями.
+
+### База даних
+
+База `PerfumeCatalogDb` створюється міграціями під час першого запуску, окремо виконувати SQL-скрипти не потрібно. Якщо база вже створена скриптами `db/p2` з Лаб. 01, видаліть її перед першим запуском, інакше міграція завершиться помилкою «об'єкт уже існує»:
+
+```sql
+USE master;
+IF DB_ID(N'PerfumeCatalogDb') IS NOT NULL
+BEGIN
+    ALTER DATABASE PerfumeCatalogDb SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE PerfumeCatalogDb;
+END
+```
+
+Рядок підключення — `ConnectionStrings:CatalogDb` у `Services/Catalog/Catalog.Api/appsettings.json` (за замовчуванням LocalDB). Його можна перевизначити змінною оточення:
+
+```powershell
+$env:ConnectionStrings__CatalogDb = "Server=localhost;Database=PerfumeCatalogDb;Trusted_Connection=True;TrustServerCertificate=True"
+```
+
+### Запуск
+
+```powershell
+dotnet run --project Services/Catalog/Catalog.Api --launch-profile http
+```
+
+Під час запуску застосунок застосовує міграції та виконує сідінг. Swagger відкривається за адресою `http://localhost:5101/swagger` (профіль `https`: `https://localhost:7101/swagger`). Catalog API запускається окремо від `Platform.AppHost` і може працювати одночасно з Orders API, бо порти відрізняються.
+
+## Ендпоінти Catalog API
+
+| Метод | Шлях | Призначення | Типові відповіді |
+|---|---|---|---|
+| `GET` | `/api/perfumes` | Список парфумів із фільтрами, сортуванням і пагінацією | `200`, `400` |
+| `GET` | `/api/perfumes/{id}` | Картка парфуму (Eager Loading) | `200`, `404` |
+| `GET` | `/api/perfumes/by-ids?ids=1&ids=5` | Парфуми за списком Id | `200`, `400` |
+| `GET` | `/api/perfumes/by-note/{noteName}` | Парфуми за нотою; можливий `layer` | `200`, `400`, `404` |
+| `POST` | `/api/perfumes` | Створити парфум із деталями та нотами | `201`, `400`, `404`, `409` |
+| `PUT` | `/api/perfumes/{id}` | Змінити назву, сезон, ціну й активність | `200`, `400`, `404`, `409` |
+| `PUT` | `/api/perfumes/{id}/price` | Змінити ціну | `200`, `400`, `404` |
+| `DELETE` | `/api/perfumes/{id}` | Видалити парфум (м'яке видалення) | `204`, `404` |
+| `GET` | `/api/brands` | Список брендів | `200` |
+| `GET` | `/api/brands/{id}` | Бренд за Id | `200`, `404` |
+| `POST` | `/api/brands` | Створити бренд | `201`, `400`, `409` |
+| `PUT` | `/api/brands/{id}` | Оновити бренд | `200`, `400`, `404`, `409` |
+| `GET` | `/api/notes` | Список нот; можливий фільтр `family` | `200`, `400` |
+| `GET` | `/api/notes/{id}` | Нота за Id | `200`, `404` |
+| `GET` | `/api/notes/{id}/perfumes` | Нота та її парфуми (Explicit Loading) | `200`, `404` |
+| `POST` | `/api/notes` | Створити ноту | `201`, `400`, `409` |
+
+Створення повертає `201 Created` із заголовком `Location`, видалення — `204 No Content`.
+
+## Приклади запитів до Catalog API
+
+`BASE` — адреса сервісу: `http://localhost:5101`.
+
+```powershell
+$BASE = "http://localhost:5101"
+
+# друга сторінка по 5 парфумів
+Invoke-RestMethod -Method Get -Uri "$BASE/api/perfumes?page=2&pageSize=5"
+
+# парфуми, що містять і гарбуз, і ваніль
+Invoke-RestMethod -Method Get -Uri "$BASE/api/perfumes?notes=Pumpkin&notes=Vanilla"
+
+# осінні парфуми від найдорожчого до найдешевшого
+Invoke-RestMethod -Method Get -Uri "$BASE/api/perfumes?season=Autumn&sortBy=price&sortDir=desc"
+
+# парфуми, у яких гарбуз є серцевою нотою
+Invoke-RestMethod -Method Get -Uri "$BASE/api/perfumes/by-note/Pumpkin?layer=Heart"
+
+# нота та її парфуми
+Invoke-RestMethod -Method Get -Uri "$BASE/api/notes/7/perfumes"
+```
+
+```powershell
+curl.exe -i "$BASE/api/perfumes/1"
+curl.exe -i "$BASE/api/perfumes/9999"
+```
+
+Створення парфуму (`POST /api/perfumes`):
+
+```json
+{
+  "brandId": 1,
+  "name": "Velvet Pumpkin Night",
+  "sku": "MA-VP-30",
+  "gender": "Women",
+  "concentration": "EDP",
+  "season": "Autumn",
+  "volumeMl": 30,
+  "price": 1990,
+  "detail": { "description": "Тестовий аромат з гарбузом і ваніллю" },
+  "notes": [
+    { "noteId": 7, "layer": "Heart" },
+    { "noteId": 8, "layer": "Base" }
+  ]
+}
+```
+
+Приклад відповіді `404 Not Found` (`GET /api/perfumes/9999`):
+
+```json
+{
+  "status": 404,
+  "title": "Resource not found",
+  "detail": "Perfume 9999 not found",
+  "instance": "/api/perfumes/9999",
+  "traceId": "0HN..."
+}
+```
+
+Приклад відповіді `400 Bad Request` на `POST /api/perfumes` з `season` = `Fall`:
+
+```json
+{
+  "title": "One or more validation errors occurred.",
+  "status": 400,
+  "errors": {
+    "Season": [ "Season must be one of: Spring, Summer, Autumn, Winter, AllYear" ]
+  }
+}
+```
+
+## Перевірка Catalog API
+
+Сценарії зручно виконувати у Swagger. Для свіжої бази після сідінгу в каталозі 10 парфумів.
+
+| Сценарій | Запит | Очікуваний результат |
+|---|---|---|
+| Пагінація | `GET /api/perfumes?page=2&pageSize=5` | 5 парфумів, `totalCount` = 10, `totalPages` = 2 |
+| Фільтр за нотами | `GET /api/perfumes?notes=Pumpkin&notes=Vanilla` | один парфум: Pumpkin Velours |
+| Фільтр і сортування | `season=Autumn`, `sortBy=price`, `sortDir=desc` | осінні парфуми, першим Smoked Fig |
+| Eager Loading | `GET /api/perfumes/1` | у журналі один SQL-запит із `JOIN` |
+| Explicit Loading | `GET /api/notes/7/perfumes` | у журналі два окремі SQL-запити |
+| Валідація DTO | `POST /api/perfumes` з порожнім `name` | `400` з переліком помилок по полях |
+| Валідація FluentValidation | `POST /api/perfumes` з `season` = `Fall` | `400` |
+| Унікальність SKU | `POST /api/perfumes` двічі з однаковим `sku` | перший `201`, другий `409` |
+| Неіснуючий Id | `GET /api/perfumes/9999` | `404` у форматі ProblemDetails |
+| Ідемпотентність сідінгу | зупинити й запустити застосунок ще раз | кількість парфумів у каталозі не змінюється |
+
 ## Git-процес
 
 Для розробки використовується така модель гілок:
 
 - `main` — стабільна версія проєкту;
 - `develop` — інтеграційна гілка;
-- `feature/lab-02-orders-service` — зміни для Лабораторної роботи № 02.
+- `feature/lab-02-orders-service` — зміни для Лабораторної роботи № 02;
+- `feature/lab-03-catalog-service` — зміни для Лабораторної роботи № 03.
+
+Зміни з feature-гілки потрапляють у `develop`, а з `develop` у `main` через Pull Request з описом.
