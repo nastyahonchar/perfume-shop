@@ -52,6 +52,43 @@ namespace Catalog.Dal.Migrations
                         {
                             t.HasCheckConstraint("CK_Brands_Year", "[FoundedYear] BETWEEN 1700 AND 2100");
                         });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Country = "France",
+                            FoundedYear = (short)1952,
+                            Name = "Maison Aurelle"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Country = "Sweden",
+                            FoundedYear = (short)2009,
+                            Name = "Nordic Bloom"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Country = "Italy",
+                            FoundedYear = (short)1987,
+                            Name = "Velvet Atelier"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Country = "Spain",
+                            FoundedYear = (short)1999,
+                            Name = "Casa Ambra"
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Country = "UAE",
+                            FoundedYear = (short)2014,
+                            Name = "Oud & Co"
+                        });
                 });
 
             modelBuilder.Entity("Catalog.Domain.Entities.Note", b =>
@@ -86,6 +123,176 @@ namespace Catalog.Dal.Migrations
                     b.ToTable("Notes", null, t =>
                         {
                             t.HasCheckConstraint("CK_Notes_Family", "[Family] IN (N'Citrus', N'Fruity', N'Gourmand', N'Spicy', N'Floral', N'Woody', N'Amber', N'Musk', N'Aquatic', N'Green', N'Smoky')");
+                        });
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Family = "Citrus",
+                            Name = "Bergamot"
+                        },
+                        new
+                        {
+                            Id = 2,
+                            Family = "Citrus",
+                            Name = "Lemon"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Family = "Citrus",
+                            Name = "Grapefruit"
+                        },
+                        new
+                        {
+                            Id = 4,
+                            Family = "Fruity",
+                            Name = "Cherry"
+                        },
+                        new
+                        {
+                            Id = 5,
+                            Family = "Fruity",
+                            Name = "Apple"
+                        },
+                        new
+                        {
+                            Id = 6,
+                            Family = "Fruity",
+                            Name = "Fig"
+                        },
+                        new
+                        {
+                            Id = 7,
+                            Family = "Gourmand",
+                            Name = "Pumpkin"
+                        },
+                        new
+                        {
+                            Id = 8,
+                            Family = "Gourmand",
+                            Name = "Vanilla"
+                        },
+                        new
+                        {
+                            Id = 9,
+                            Family = "Gourmand",
+                            Name = "Caramel"
+                        },
+                        new
+                        {
+                            Id = 10,
+                            Family = "Gourmand",
+                            Name = "Coffee"
+                        },
+                        new
+                        {
+                            Id = 11,
+                            Family = "Spicy",
+                            Name = "Cinnamon"
+                        },
+                        new
+                        {
+                            Id = 12,
+                            Family = "Spicy",
+                            Name = "Clove"
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Family = "Spicy",
+                            Name = "Cardamom"
+                        },
+                        new
+                        {
+                            Id = 14,
+                            Family = "Spicy",
+                            Name = "Pink Pepper"
+                        },
+                        new
+                        {
+                            Id = 15,
+                            Family = "Floral",
+                            Name = "Rose"
+                        },
+                        new
+                        {
+                            Id = 16,
+                            Family = "Floral",
+                            Name = "Iris"
+                        },
+                        new
+                        {
+                            Id = 17,
+                            Family = "Floral",
+                            Name = "Jasmine"
+                        },
+                        new
+                        {
+                            Id = 18,
+                            Family = "Floral",
+                            Name = "Cherry Blossom"
+                        },
+                        new
+                        {
+                            Id = 19,
+                            Family = "Woody",
+                            Name = "Cedar"
+                        },
+                        new
+                        {
+                            Id = 20,
+                            Family = "Woody",
+                            Name = "Sandalwood"
+                        },
+                        new
+                        {
+                            Id = 21,
+                            Family = "Woody",
+                            Name = "Patchouli"
+                        },
+                        new
+                        {
+                            Id = 22,
+                            Family = "Woody",
+                            Name = "Oud"
+                        },
+                        new
+                        {
+                            Id = 23,
+                            Family = "Woody",
+                            Name = "Vetiver"
+                        },
+                        new
+                        {
+                            Id = 24,
+                            Family = "Amber",
+                            Name = "Amber"
+                        },
+                        new
+                        {
+                            Id = 25,
+                            Family = "Musk",
+                            Name = "Musk"
+                        },
+                        new
+                        {
+                            Id = 26,
+                            Family = "Aquatic",
+                            Name = "Sea Salt"
+                        },
+                        new
+                        {
+                            Id = 27,
+                            Family = "Green",
+                            Name = "Mint"
+                        },
+                        new
+                        {
+                            Id = 28,
+                            Family = "Smoky",
+                            Name = "Smoke"
                         });
                 });
 

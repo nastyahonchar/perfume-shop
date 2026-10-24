@@ -17,5 +17,12 @@ public class BrandConfiguration : IEntityTypeConfiguration<Brand>
         builder.Property(b => b.Country).HasMaxLength(60);
 
         builder.HasIndex(b => b.Name).IsUnique().HasDatabaseName("UQ_Brands_Name");
+
+        builder.HasData(
+            new Brand { Id = 1, Name = "Maison Aurelle", Country = "France", FoundedYear = 1952 },
+            new Brand { Id = 2, Name = "Nordic Bloom", Country = "Sweden", FoundedYear = 2009 },
+            new Brand { Id = 3, Name = "Velvet Atelier", Country = "Italy", FoundedYear = 1987 },
+            new Brand { Id = 4, Name = "Casa Ambra", Country = "Spain", FoundedYear = 1999 },
+            new Brand { Id = 5, Name = "Oud & Co", Country = "UAE", FoundedYear = 2014 });
     }
 }
