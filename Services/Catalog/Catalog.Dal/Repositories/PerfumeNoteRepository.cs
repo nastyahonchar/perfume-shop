@@ -13,14 +13,18 @@ public class PerfumeNoteRepository : GenericRepository<PerfumeNote>, IPerfumeNot
 
     public async Task<IReadOnlyList<Perfume>> GetPerfumesByNoteAsync(
         string noteName, string? layer = null, CancellationToken ct = default)
-        => await Set
-            .Where(pn => pn.Note.Name == noteName
-                         && (layer == null || pn.Layer == layer)
-                         && pn.Perfume.IsActive && !pn.Perfume.IsDeleted)
-            .OrderBy(pn => pn.Perfume.Name)
-            .Select(pn => pn.Perfume)
+    {
+        var perfumeIds = Set
+            .Where(pn => pn.Note.Name == noteName && (layer == null || pn.Layer == layer))
+            .Select(pn => pn.PerfumeId);
+
+        return await Context.Set<Perfume>()
+            .Include(p => p.Brand)
+            .Where(p => p.IsActive && !p.IsDeleted && perfumeIds.Contains(p.Id))
+            .OrderBy(p => p.Name)
             .AsNoTracking()
             .ToListAsync(ct);
+    }
 
     public async Task<IReadOnlyList<Perfume>> GetPerfumesByAllNotesAsync(
         IReadOnlyCollection<string> noteNames, CancellationToken ct = default)
@@ -36,6 +40,7 @@ public class PerfumeNoteRepository : GenericRepository<PerfumeNote>, IPerfumeNot
             .Select(g => g.Key);
 
         return await Context.Set<Perfume>()
+            .Include(p => p.Brand)
             .Where(p => p.IsActive && !p.IsDeleted && perfumeIds.Contains(p.Id))
             .OrderBy(p => p.Name)
             .AsNoTracking()
