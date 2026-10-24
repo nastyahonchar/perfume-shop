@@ -16,7 +16,7 @@ public class NoteRepository : GenericRepository<Note>, INoteRepository
         await Context.Entry(note)
             .Collection(n => n.PerfumeNotes)
             .Query()
-            .Include(pn => pn.Perfume)
+            .Include(pn => pn.Perfume).ThenInclude(p => p.Brand)
             .Where(pn => !pn.Perfume.IsDeleted)
             .LoadAsync(ct);
 
