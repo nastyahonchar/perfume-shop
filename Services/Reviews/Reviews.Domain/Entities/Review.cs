@@ -9,8 +9,8 @@ public class Review : BaseEntity
 {
     private const int MaxPhotos = 10;
 
-    private readonly List<string> _photos = new();       
-    private readonly List<Comment> _comments = new();      
+    private List<string> _photos = new();       
+    private List<Comment> _comments = new();      
 
 #pragma warning disable CS0649
     private BsonDocument? _extraElements;
