@@ -1,6 +1,6 @@
 # Nota — інтернет-магазин парфумів
 
-Навчальний проєкт з дисципліни «Технології .NET розробки Web-додатків». Проєкт розвивається в межах лабораторних робіт: проєктування баз даних для мікросервісної архітектури (Лаб. 01), тришаровий Web API на ADO.NET і Dapper (Лаб. 02) та тришаровий Web API на Entity Framework Core (Лаб. 03).
+Навчальний проєкт з дисципліни «Технології .NET розробки Web-додатків». Проєкт розвивається в межах лабораторних робіт: проєктування баз даних для мікросервісної архітектури (Лаб. 01), тришаровий Web API на ADO.NET і Dapper (Лаб. 02) тришаровий Web API на Entity Framework Core (Лаб. 03) та Clean Architecture з CQRS на MongoDB (Лаб. 04).
 
 ## Зміст
 
@@ -20,6 +20,11 @@
 - [Ендпоінти Catalog API](#ендпоінти-catalog-api)
 - [Приклади запитів до Catalog API](#приклади-запитів-до-catalog-api)
 - [Перевірка Catalog API](#перевірка-catalog-api)
+- [Лабораторна робота № 04: Reviews API](#лабораторна-робота--04-reviews-api)
+- [Запуск Reviews API](#запуск-reviews-api)
+- [Ендпоінти Reviews API](#ендпоінти-reviews-api)
+- [Приклади запитів до Reviews API](#приклади-запитів-до-reviews-api)
+- [Перевірка Reviews API](#перевірка-reviews-api)
 - [Git-процес](#git-процес)
 
 ## Опис предметної області
@@ -36,7 +41,7 @@ Nota — інтернет-магазин парфумерії. Покупці п
 | 2 | Каталог (Catalog) | `PerfumeCatalogDb` | SQL Server, EF Core | `Brands`, `Perfumes`, `PerfumeDetails`, `PerfumeImages`, `Notes`, `PerfumeNotes` |
 | 3 | Відгуки (Reviews) | `PerfumeReviewsDb` | MongoDB | `reviews`, `discussions`, `discussionMessages`, `ratingSummaries` |
 
-У межах Лабораторної роботи № 02 реалізовано контекст **Orders**, а в Лабораторній роботі № 03 — контекст **Catalog**. Кожен із них є окремою вертикаллю від доступу до бази даних до HTTP API з однаковою тришаровою будовою.
+У межах Лабораторної роботи № 02 реалізовано контекст **Orders**, у Лабораторній роботі № 03 — контекст **Catalog**: обидва мають тришарову будову (Api → Bll → Dal). У Лабораторній роботі № 04 реалізовано контекст **Reviews** за принципами Clean Architecture з CQRS: чотири шари, де домен не залежить ні від бази, ні від API.
 
 ### Тришарова архітектура Orders
 
@@ -139,14 +144,20 @@ perfume-shop/
     │   ├── Orders.Bll/
     │   ├── Orders.Dal/
     │   └── Orders.Domain/
-    └── Catalog/
-        ├── Catalog.Api/
-        ├── Catalog.Bll/
-        ├── Catalog.Dal/
-        └── Catalog.Domain/
+    ├── Catalog/
+    │   ├── Catalog.Api/
+    │   ├── Catalog.Bll/
+    │   ├── Catalog.Dal/
+    │   └── Catalog.Domain/
+    └── Reviews/
+        ├── Reviews.Domain/
+        ├── Reviews.Application/
+        ├── Reviews.Infrastructure/
+        ├── Reviews.WebApi/
+        └── Reviews.Tests/
 ```
 
-`Platform.slnx`, `Platform.AppHost` і `Services/Orders` — рішення Лабораторної роботи № 02; `Services/Catalog` додано в Лабораторній роботі № 03.
+`Platform.slnx`, `Platform.AppHost` і `Services/Orders` — рішення Лабораторної роботи № 02; `Services/Catalog` додано в Лабораторній роботі № 03, `Services/Reviews` — у Лабораторній роботі № 04.
 
 ## Лабораторна робота № 01: бази даних
 
@@ -181,7 +192,7 @@ mongosh "mongodb://localhost:27017/PerfumeReviewsDb" --file db/p3/seed.js
 mongosh "mongodb://localhost:27017/PerfumeReviewsDb" --file db/p3/queries.js
 ```
 
-`collections.js` створює колекції, правила валідації та індекси; `seed.js` додає тестові документи; `queries.js` містить приклади запитів та агрегацій. Приклади документів у форматі JSON розміщено в `docs/mongo-examples/`.
+`collections.js` створює колекції, правила валідації та індекси; `seed.js` додає тестові документи; `queries.js` містить приклади запитів та агрегацій. Приклади документів у форматі JSON розміщено в `docs/mongo-examples/`. Reviews API (Лаб. 04) працює з цією самою базою `PerfumeReviewsDb` і колекцією `reviews`; індекси з `collections.js` сервіс створює сам під час старту з тими самими назвами.
 
 ### Збережувані процедури БД замовлень
 
@@ -709,6 +720,246 @@ curl.exe -i "$BASE/api/perfumes/9999"
 | Неіснуючий Id | `GET /api/perfumes/9999` | `404` у форматі ProblemDetails |
 | Ідемпотентність сідінгу | зупинити й запустити застосунок ще раз | кількість парфумів у каталозі не змінюється |
 
+## Лабораторна робота № 04: Reviews API
+
+### Призначення
+
+Reviews API — сервіс відгуків на парфуми: оцінки, тексти, профіль аромату (довговічність, шлейф, сезони носіння, оцінки нот), фото та коментарі. Він збудований за принципами Clean Architecture з розділенням запису й читання (CQRS) на MediatR і працює з MongoDB. Сервіс працює з тією самою базою `PerfumeReviewsDb` і колекцією `reviews`, що описані в Лаб. 01, тому структура документів не змінюється.
+
+### Шари й напрямок залежностей
+
+```text
+Reviews.WebApi             контролери, Program.cs, ProblemDetails, Swagger
+      |  \
+      |   v
+      |  Reviews.Infrastructure   MongoDbContext, BSON-мапінг, репозиторії, сідінг, індекси
+      v   /
+Reviews.Application        команди, запити, behaviors, валідатори, DTO
+      |
+      v
+Reviews.Domain             сутності, Value Objects, винятки, інтерфейси (без залежностей від інших шарів)
+```
+
+| Шар | Відповідальність | Залежить від |
+|---|---|---|
+| `Reviews.Domain` | `BaseEntity`, `ValueObject`, сутності `Review` і `Comment`, Value Objects `Author`, `ScentProfile`, `NoteRating`, доменні винятки, `IReviewRepository`. Використовує лише типи BSON (`ObjectId`), без драйвера бази даних | нічого |
+| `Reviews.Application` | команди й запити MediatR, обробники, Pipeline Behaviors, валідатори FluentValidation, DTO, профіль AutoMapper, інтерфейс читання `IReviewQueries` | `Reviews.Domain` |
+| `Reviews.Infrastructure` | `MongoDbContext`, `BsonClassMap`, `ReviewRepository`, `ReviewQueries`, сідер, сервіс створення індексів, `AddInfrastructure` | `Reviews.Application`, `Reviews.Domain` |
+| `Reviews.WebApi` | контролери через `ISender`, глобальна обробка помилок, Serilog, Swagger, DI | `Reviews.Application`, `Reviews.Infrastructure` |
+
+Інфраструктура лише реалізує інтерфейси, оголошені у внутрішніх шарах. Жоден контролер і жоден обробник не звертається до `IMongoCollection` напряму.
+
+### Технології
+
+| Компонент | Версія |
+|---|---|
+| .NET | 9 |
+| MediatR | 12.5.0 (остання версія без ліцензійного ключа) |
+| FluentValidation, FluentValidation.DependencyInjectionExtensions | остання стабільна |
+| AutoMapper | 14.0.0 |
+| MongoDB.Driver, MongoDB.Bson | остання стабільна |
+| Serilog.AspNetCore | 10.0.0 |
+| Swashbuckle.AspNetCore | 9.0.6 |
+| xUnit | тести |
+
+### Доменний шар
+
+- `BaseEntity`: `Id` (`ObjectId`), `CreatedAt`, `UpdatedAt`, `Version` (для оптимістичної конкурентності).
+- `Review` — відгук із закритими сеттерами, перевірками в конструкторі й методами зміни стану (`Update`, `AddComment`, `AddPhoto`, `LinkDiscussion`). Містить вкладені колекції фото й коментарів. Порушення правил (наприклад, оцінка поза діапазоном 1–5) кидає `DomainException`.
+- `Comment` — коментар як вкладений документ у масиві `comments`.
+- Value Objects порівнюються за значеннями (`ValueObject.GetEqualityComponents`), незмінні, перевіряються в конструкторі: `Author` (`userId`, `displayName`), `ScentProfile`, `NoteRating`.
+- Для гнучкої схеми з Лаб. 01 `Review` зберігає невідомі поля документа (наприклад, `wearInfo`), тому вони не губляться під час оновлення.
+
+### CQRS і MediatR
+
+| Тип | Назва | Призначення |
+|---|---|---|
+| Команда | `CreateReviewCommand` | створити відгук (повертає рядковий `ObjectId`) |
+| Команда | `UpdateReviewCommand` | змінити відгук; містить очікувану версію документа |
+| Команда | `AddCommentCommand` | додати коментар |
+| Команда | `DeleteReviewCommand` | видалити відгук |
+| Запит | `GetReviewByIdQuery` | повна картка відгуку |
+| Запит | `GetReviewsListQuery` | список відгуків із фільтром за товаром і пагінацією |
+
+Кожна команда й кожен запит має окремий обробник `IRequestHandler`. Команди працюють через `IReviewRepository` (Domain), запити через `IReviewQueries` (Application); реалізації лежать в Infrastructure. Реєстрація: `AddApplication()` (MediatR зі скануванням збірки, behaviors, валідатори) і `AddInfrastructure()` (MongoDB), кожен шар підключається власним методом розширення.
+
+### Pipeline Behaviors
+
+Порядок виконання задається порядком `AddOpenBehavior`:
+
+| № | Behavior | Призначення |
+|---|---|---|
+| 1 (зовнішній) | `LoggingBehavior` | структуроване логування запитів і результату, зокрема збоїв валідації |
+| 2 | `ValidationBehavior` | виконує всі валідатори FluentValidation, збирає всі помилки разом і кидає `ValidationException` до виклику обробника |
+| 3 (біля обробника) | `PerformanceBehavior` | попередження в лог, якщо обробник працює довше 500 мс |
+
+Валідатори описано для всіх команд і запитів. Вони перевіряють коректність рядка `ObjectId`, діапазони, допустимі значення профілю аромату, а також містять асинхронне правило із запитом до MongoDB: користувач не може залишити другий відгук на той самий товар.
+
+### Інфраструктура MongoDB
+
+- `MongoDbContext` створюється з `IOptions<MongoDbOptions>` (секція `MongoDb` в `appsettings.json`).
+- BSON-мапінг налаштовано в `MongoMappings` через `BsonClassMap`, без атрибутів у доменних класах: camelCase, приватні поля колекцій (`_photos`, `_comments`), створення Value Objects через конструктор, поле для невідомих елементів. Мапінг реєструється один раз під час старту.
+- `ReviewRepository` забезпечує оптимістичну конкурентність: оновлення застосовується лише до документа з очікуваною версією, інакше `ConflictException` (409).
+- `ReviewQueries` читає список через aggregation pipeline (`$match`, `$sort`, `$skip`, `$limit`, `$project`): фільтрація й пагінація виконуються в MongoDB, а кількість коментарів рахується на боці сервера.
+- Індекси створює `IndexCreationService` під час старту (назви збігаються з індексами Лаб. 01):
+
+| Індекс | Призначення |
+|---|---|
+| `ix_reviews_product_created` (`productId`, `createdAt`) | останні відгуки про товар |
+| `ix_reviews_product_rating` (`productId`, `rating`) | найвищі й найнижчі оцінки товару |
+| `ix_reviews_author` (`author.userId`) | відгуки одного автора |
+| `tx_reviews_text` (текстовий: `text`, `title`) | повнотекстовий пошук |
+| `ux_reviews_product_author` (унікальний: `productId`, `author.userId`) | один відгук від автора на товар |
+
+- Сідінг: `ReviewSeeder` (`IDataSeeder`) вставляє початкові відгуки однією bulk-операцією лише в порожню колекцію, тому повторний запуск не створює дублікатів. У production сідінг вимкнено.
+
+### Обробка помилок і журнал
+
+Глобальний обробник `GlobalExceptionHandler` (`IExceptionHandler` + `AddProblemDetails`) повертає помилки у форматі `ProblemDetails` і логує кожен виняток один раз:
+
+| Виняток | HTTP-статус |
+|---|---|
+| `NotFoundException` | `404 Not Found` |
+| `ValidationException` (FluentValidation) | `400 Bad Request` (`ValidationProblemDetails` з переліком полів) |
+| `DomainException` | `400 Bad Request` |
+| `ConflictException` (зокрема конфлікт версій) | `409 Conflict` |
+| `MongoWriteException` з `DuplicateKey` | `409 Conflict` (інші помилки запису — `400`) |
+| `MongoConnectionException`, `TimeoutException` | `503 Service Unavailable` |
+| інші винятки | `500 Internal Server Error` |
+
+Деталі внутрішніх помилок бази повертаються лише в середовищі Development. Журнал Serilog структурований: кожен запис має властивості `CorrelationId` і `RequestPath`.
+
+### Тести
+
+Проєкт `Reviews.Tests` (xUnit) перевіряє: правила домену (створення `Review` з `Rating = 10` кидає `DomainException` без звернення до бази), Value Objects, `ValidationBehavior` (команда з `Rating = 10` відхиляється до виклику обробника) та BSON-мапінг без підключення до бази (структура документа, відсутність службових полів .NET, збереження невідомих полів).
+
+```powershell
+dotnet test Services/Reviews/Reviews.Tests/Reviews.Tests.csproj
+```
+
+## Запуск Reviews API
+
+### Передумови
+
+- .NET 9 SDK.
+- MongoDB (локально або в Docker) на `localhost:27017` і база `PerfumeReviewsDb` з Лаб. 01 (`db/p3/collections.js`, `seed.js`). Якщо база порожня, сервіс сам створить індекси й додасть початкові відгуки.
+
+### Налаштування
+
+Секція `MongoDb` у `Services/Reviews/Reviews.WebApi/appsettings.json`:
+
+```json
+{
+  "MongoDb": {
+    "ConnectionString": "mongodb://localhost:27017/?maxPoolSize=50&serverSelectionTimeoutMS=5000",
+    "DatabaseName": "PerfumeReviewsDb"
+  }
+}
+```
+
+Параметри пулу з'єднань і таймаутів задано в рядку підключення. Налаштування можна перевизначити змінними оточення, наприклад:
+
+```powershell
+$env:MongoDb__ConnectionString = "mongodb://localhost:27017"
+```
+
+### Запуск
+
+```powershell
+dotnet run --project Services/Reviews/Reviews.WebApi --launch-profile http
+```
+
+Swagger відкривається за адресою `http://localhost:5201/swagger` (профіль `https`: `https://localhost:7201/swagger`). Reviews API запускається окремо від `Platform.AppHost` і може працювати одночасно з Orders API та Catalog API, бо порти відрізняються.
+
+## Ендпоінти Reviews API
+
+| Метод | Шлях | Призначення | Типові відповіді |
+|---|---|---|---|
+| `GET` | `/api/reviews` | Список відгуків; параметри `productId`, `page`, `pageSize` | `200`, `400` |
+| `GET` | `/api/reviews/{id}` | Повна картка відгуку; версія документа в заголовку `ETag` | `200`, `400`, `404` |
+| `POST` | `/api/reviews` | Створити відгук | `201`, `400` |
+| `PUT` | `/api/reviews/{id}` | Змінити відгук; очікувана версія в заголовку `If-Match` або в полі `version` | `200`, `400`, `404`, `409` |
+| `POST` | `/api/reviews/{id}/comments` | Додати коментар | `200`, `400`, `404` |
+| `DELETE` | `/api/reviews/{id}` | Видалити відгук | `204`, `400`, `404` |
+
+Створення повертає `201 Created` із заголовком `Location` та рядковим `ObjectId` у тілі відповіді. Прапорець `verifiedPurchase` клієнт не передає: підтвердження покупки належить контексту Orders, тому нові відгуки створюються без нього.
+
+## Приклади запитів до Reviews API
+
+`BASE` — адреса сервісу: `http://localhost:5201`.
+
+```powershell
+$BASE = "http://localhost:5201"
+
+# список відгуків про товар 1, перша сторінка
+Invoke-RestMethod -Method Get -Uri "$BASE/api/reviews?productId=1&page=1&pageSize=10"
+
+# створити відгук
+$body = @{
+    productId   = 3
+    productName = "Cherry Meadow"
+    brandName   = "Nordic Bloom"
+    authorId    = "u-20"
+    authorName  = "Тест"
+    rating      = 4
+    title       = "Весна"
+    text        = "Легкий вишневий аромат"
+} | ConvertTo-Json
+
+Invoke-RestMethod -Method Post -Uri "$BASE/api/reviews" -ContentType "application/json" -Body $body
+```
+
+```powershell
+curl.exe -i "$BASE/api/reviews/000000000000000000000000"
+```
+
+Приклад відповіді `400 Bad Request` на створення відгуку з `rating` = 10 (обробник не викликається):
+
+```json
+{
+  "title": "Validation failed",
+  "status": 400,
+  "detail": "One or more validation errors occurred.",
+  "instance": "/api/reviews",
+  "errors": {
+    "Rating": [ "'Rating' must be between 1 and 5. You entered 10." ]
+  },
+  "traceId": "0HN..."
+}
+```
+
+Приклад відповіді `409 Conflict` на повторне оновлення з застарілою версією (`If-Match: "0"`):
+
+```json
+{
+  "title": "Conflict",
+  "status": 409,
+  "detail": "Review 66f0c2a10000000000000001 was modified (expected version 0, current 1)",
+  "instance": "/api/reviews/66f0c2a10000000000000001",
+  "traceId": "0HN..."
+}
+```
+
+## Перевірка Reviews API
+
+Сценарії зручно виконувати у Swagger. Для бази після Лаб. 01 у колекції 8 відгуків.
+
+| Сценарій | Запит | Очікуваний результат |
+|---|---|---|
+| Список | `GET /api/reviews` | 8 відгуків, `totalCount` = 8, нові першими |
+| Фільтр і пагінація | `GET /api/reviews?productId=1`; `page=2&pageSize=5` | 2 відгуки; 3 відгуки на другій сторінці |
+| Картка й ETag | `GET /api/reviews/{id}` | `200`, у заголовках `ETag` |
+| Валідація до обробника | `POST /api/reviews` з `rating` = 10 | `400`; у журналі `Handling CreateReviewCommand` і `failed with ValidationException`, а `Handled CreateReviewCommand` немає |
+| Створення | `POST /api/reviews` з новим `productId` | `201`, `Location`, рядковий `ObjectId` |
+| Дубль відгуку | той самий `POST` ще раз | `400` («You have already reviewed this product») |
+| Некоректний Id | `GET /api/reviews/abc` | `400` |
+| Неіснуючий Id | `GET /api/reviews/000000000000000000000000` | `404` у форматі ProblemDetails |
+| Оновлення | `PUT /api/reviews/{id}` із `If-Match: "0"` | `200`, нова версія в `ETag` |
+| Конфлікт версій | той самий `PUT` ще раз із `If-Match: "0"` | `409` |
+| Коментар | `POST /api/reviews/{id}/comments` | `200`, кількість коментарів збільшилась |
+| Видалення | `DELETE /api/reviews/{id}` | `204` |
+| Індекси | `db.reviews.getIndexes()` у `mongosh` | шість індексів, зокрема `ux_reviews_product_author` |
+
 ## Git-процес
 
 Для розробки використовується така модель гілок:
@@ -716,6 +967,7 @@ curl.exe -i "$BASE/api/perfumes/9999"
 - `main` — стабільна версія проєкту;
 - `develop` — інтеграційна гілка;
 - `feature/lab-02-orders-service` — зміни для Лабораторної роботи № 02;
-- `feature/lab-03-catalog-service` — зміни для Лабораторної роботи № 03.
+- `feature/lab-03-catalog-service` — зміни для Лабораторної роботи № 03;
+- `feature/lab-04-reviews-service` — зміни для Лабораторної роботи № 04.
 
 Зміни з feature-гілки потрапляють у `develop`, а з `develop` у `main` через Pull Request з описом.
