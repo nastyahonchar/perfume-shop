@@ -1,26 +1,49 @@
-using Microsoft.Extensions.Configuration;
-
 var builder = DistributedApplication.CreateBuilder(args);
 
-var useSqlContainer = builder.Configuration.GetValue<bool>("UseSqlContainer");
+var sqlPassword = builder.AddParameter("sql-password", secret: true);
 
-IResourceBuilder<IResourceWithConnectionString> ordersDb;
+var sql = builder.AddSqlServer("sql", sqlPassword)
+    .WithDataVolume()
+    .WithLifetime(ContainerLifetime.Persistent);
 
-if (useSqlContainer)
-{
-    ordersDb = builder
-        .AddSqlServer("sql")
-        .WithDataVolume()
-        .WithLifetime(ContainerLifetime.Persistent)
-        .AddDatabase("OrdersDb", "PerfumeOrdersDb");
-}
-else
-{
-    ordersDb = builder.AddConnectionString("OrdersDb");
-}
+var ordersDb = sql.AddDatabase("OrdersDb", "PerfumeOrdersDb");
+var catalogDb = sql.AddDatabase("CatalogDb", "PerfumeCatalogDb");
 
-builder.AddProject<Projects.Orders_Api>("orders-api")
+var mongo = builder.AddMongoDB("mongo")
+    .WithDataVolume()
+    .WithLifetime(ContainerLifetime.Persistent);
+
+var reviewsDb = mongo.AddDatabase("ReviewsDb", "PerfumeReviewsDb");
+
+
+var orders = builder.AddProject<Projects.Orders_Api>("orders-api")
     .WithReference(ordersDb)
     .WaitFor(ordersDb);
+
+var catalog = builder.AddProject<Projects.Catalog_Api>("catalog-api")
+    .WithReference(catalogDb)
+    .WaitFor(catalogDb);
+
+var reviews = builder.AddProject<Projects.Reviews_WebApi>("reviews-api")
+    .WithReference(reviewsDb)
+    .WaitFor(reviewsDb);
+
+
+var aggregator = builder.AddProject<Projects.Platform_Aggregator>("aggregator")
+    .WithReference(orders)
+    .WithReference(catalog)
+    .WithReference(reviews)
+    .WaitFor(orders)
+    .WaitFor(catalog)
+    .WaitFor(reviews);
+
+
+builder.AddProject<Projects.Platform_ApiGateway>("gateway")
+    .WithHttpEndpoint(port: 5000, name: "public")
+    .WithReference(orders)
+    .WithReference(catalog)
+    .WithReference(reviews)
+    .WithReference(aggregator)
+    .WaitFor(aggregator);
 
 builder.Build().Run();
