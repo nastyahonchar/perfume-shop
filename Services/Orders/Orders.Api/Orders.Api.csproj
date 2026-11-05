@@ -16,6 +16,7 @@
     <ProjectReference Include="..\Orders.Bll\Orders.Bll.csproj" />
     <ProjectReference Include="..\Orders.Dal\Orders.Dal.csproj" />
     <ProjectReference Include="..\Orders.Domain\Orders.Domain.csproj" />
+    <ProjectReference Include="..\..\..\Platform.ServiceDefaults\Platform.ServiceDefaults.csproj" />
   </ItemGroup>
 
 </Project>
