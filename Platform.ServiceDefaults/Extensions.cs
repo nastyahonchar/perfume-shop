@@ -3,16 +3,17 @@ using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.ServiceDiscovery;
 using OpenTelemetry;
 using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
+using Platform.ServiceDefaults;
+using Serilog;
+using Serilog.Events;
+using Serilog.Formatting.Compact;
 
 namespace Microsoft.Extensions.Hosting;
 
-// Adds common Aspire services: service discovery, resilience, health checks, and OpenTelemetry.
-// This project should be referenced by each service project in your solution.
-// To learn more about using this project, see https://aka.ms/dotnet/aspire/service-defaults
 public static class Extensions
 {
     private const string HealthEndpointPath = "/health";
@@ -20,26 +21,46 @@ public static class Extensions
 
     public static TBuilder AddServiceDefaults<TBuilder>(this TBuilder builder) where TBuilder : IHostApplicationBuilder
     {
+        builder.ConfigureSerilog();
         builder.ConfigureOpenTelemetry();
-
         builder.AddDefaultHealthChecks();
 
         builder.Services.AddServiceDiscovery();
+        builder.Services.AddHttpContextAccessor();
+        builder.Services.AddTransient<CorrelationIdHandler>();
 
         builder.Services.ConfigureHttpClientDefaults(http =>
         {
-            // Turn on resilience by default
             http.AddStandardResilienceHandler();
-
-            // Turn on service discovery by default
             http.AddServiceDiscovery();
+            http.AddHttpMessageHandler<CorrelationIdHandler>();
         });
 
-        // Uncomment the following to restrict the allowed schemes for service discovery.
-        // builder.Services.Configure<ServiceDiscoveryOptions>(options =>
-        // {
-        //     options.AllowedSchemes = ["https"];
-        // });
+        return builder;
+    }
+
+    public static TBuilder ConfigureSerilog<TBuilder>(this TBuilder builder) where TBuilder : IHostApplicationBuilder
+    {
+        var serviceName = builder.Configuration["OTEL_SERVICE_NAME"] ?? builder.Environment.ApplicationName;
+        var isDevelopment = builder.Environment.IsDevelopment();
+
+        builder.Logging.ClearProviders();
+
+        builder.Services.AddSerilog((services, cfg) => cfg
+            .MinimumLevel.Is(isDevelopment ? LogEventLevel.Debug : LogEventLevel.Information)
+            .MinimumLevel.Override("Microsoft", LogEventLevel.Information)
+            .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+            .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
+            .MinimumLevel.Override("System.Net.Http.HttpClient", LogEventLevel.Warning)
+            .MinimumLevel.Override("MongoDB", LogEventLevel.Warning)
+            .Enrich.FromLogContext()
+            .Enrich.WithProperty("ServiceName", serviceName)
+            .Enrich.WithEnvironmentName()
+            .Enrich.WithMachineName()
+            .Enrich.WithThreadId()
+            .Enrich.With<ActivityLogEnricher>()
+            .WriteTo.Console(new CompactJsonFormatter()),
+            writeToProviders: true);
 
         return builder;
     }
@@ -52,7 +73,14 @@ public static class Extensions
             logging.IncludeScopes = true;
         });
 
+        var applicationName = builder.Environment.ApplicationName;
+        var domainPrefix = applicationName.Split('.')[0];
+
         builder.Services.AddOpenTelemetry()
+            .ConfigureResource(resource => resource.AddAttributes(new[]
+            {
+                new KeyValuePair<string, object>("deployment.environment", builder.Environment.EnvironmentName)
+            }))
             .WithMetrics(metrics =>
             {
                 metrics.AddAspNetCoreInstrumentation()
@@ -61,21 +89,39 @@ public static class Extensions
             })
             .WithTracing(tracing =>
             {
-                tracing.AddSource(builder.Environment.ApplicationName)
-                    .AddAspNetCoreInstrumentation(tracing =>
-                        // Exclude health check requests from tracing
-                        tracing.Filter = context =>
+                tracing.SetSampler(CreateSampler(builder))
+                    .AddSource(applicationName)
+                    .AddSource($"{domainPrefix}.*")
+                    .AddSource("MongoDB.Driver.Core.Extensions.DiagnosticSources")
+                    .AddAspNetCoreInstrumentation(options =>
+                    {
+                        options.RecordException = true;
+                        options.Filter = context =>
                             !context.Request.Path.StartsWithSegments(HealthEndpointPath)
-                            && !context.Request.Path.StartsWithSegments(AlivenessEndpointPath)
-                    )
-                    // Uncomment the following line to enable gRPC instrumentation (requires the OpenTelemetry.Instrumentation.GrpcNetClient package)
-                    //.AddGrpcClientInstrumentation()
-                    .AddHttpClientInstrumentation();
+                            && !context.Request.Path.StartsWithSegments(AlivenessEndpointPath);
+                    })
+                    .AddHttpClientInstrumentation()
+                    .AddSqlClientInstrumentation();
             });
 
         builder.AddOpenTelemetryExporters();
 
         return builder;
+    }
+
+    private static Sampler CreateSampler(IHostApplicationBuilder builder)
+    {
+        if (builder.Environment.IsDevelopment())
+        {
+            return new AlwaysOnSampler();
+        }
+
+        var ratio = double.TryParse(builder.Configuration["Telemetry:SamplingRatio"],
+            System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            ? Math.Clamp(parsed, 0, 1)
+            : 0.1;
+
+        return new ParentBasedSampler(new TraceIdRatioBasedSampler(ratio));
     }
 
     private static TBuilder AddOpenTelemetryExporters<TBuilder>(this TBuilder builder) where TBuilder : IHostApplicationBuilder
@@ -87,20 +133,12 @@ public static class Extensions
             builder.Services.AddOpenTelemetry().UseOtlpExporter();
         }
 
-        // Uncomment the following lines to enable the Azure Monitor exporter (requires the Azure.Monitor.OpenTelemetry.AspNetCore package)
-        //if (!string.IsNullOrEmpty(builder.Configuration["APPLICATIONINSIGHTS_CONNECTION_STRING"]))
-        //{
-        //    builder.Services.AddOpenTelemetry()
-        //       .UseAzureMonitor();
-        //}
-
         return builder;
     }
 
     public static TBuilder AddDefaultHealthChecks<TBuilder>(this TBuilder builder) where TBuilder : IHostApplicationBuilder
     {
         builder.Services.AddHealthChecks()
-            // Add a default liveness check to ensure app is responsive
             .AddCheck("self", () => HealthCheckResult.Healthy(), ["live"]);
 
         return builder;
@@ -108,14 +146,10 @@ public static class Extensions
 
     public static WebApplication MapDefaultEndpoints(this WebApplication app)
     {
-        // Adding health checks endpoints to applications in non-development environments has security implications.
-        // See https://aka.ms/dotnet/aspire/healthchecks for details before enabling these endpoints in non-development environments.
         if (app.Environment.IsDevelopment())
         {
-            // All health checks must pass for app to be considered ready to accept traffic after starting
             app.MapHealthChecks(HealthEndpointPath);
 
-            // Only health checks tagged with the "live" tag must pass for app to be considered alive
             app.MapHealthChecks(AlivenessEndpointPath, new HealthCheckOptions
             {
                 Predicate = r => r.Tags.Contains("live")
