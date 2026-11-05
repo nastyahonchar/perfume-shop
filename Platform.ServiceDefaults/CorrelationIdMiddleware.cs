@@ -22,7 +22,11 @@ public class CorrelationIdMiddleware(RequestDelegate next, ILogger<CorrelationId
             generated = true;
         }
 
-        context.Response.Headers[HeaderName] = correlationId;
+        context.Response.OnStarting(() =>
+        {
+            context.Response.Headers[HeaderName] = correlationId;
+            return Task.CompletedTask;
+        });
         Activity.Current?.SetTag("correlation.id", correlationId);
 
         using (LogContext.PushProperty("CorrelationId", correlationId))
