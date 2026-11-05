@@ -1,4 +1,5 @@
 ﻿using MediatR;
+using Microsoft.Extensions.Logging;
 using Reviews.Application.Common.Messaging;
 using Reviews.Application.Reviews.Dtos;
 using Reviews.Application.Reviews.Mapping;
@@ -20,7 +21,7 @@ public record CreateReviewCommand(
     ScentProfileDto? ScentProfile,
     List<string>? Photos) : ICommand<string>;
 
-public class CreateReviewCommandHandler(IReviewRepository reviews)
+public class CreateReviewCommandHandler(IReviewRepository reviews, ILogger<CreateReviewCommandHandler> logger)
     : IRequestHandler<CreateReviewCommand, string>
 {
     public async Task<string> Handle(CreateReviewCommand cmd, CancellationToken ct)
@@ -38,6 +39,10 @@ public class CreateReviewCommandHandler(IReviewRepository reviews)
             photos: cmd.Photos);
 
         await reviews.AddAsync(review, ct);
+
+        logger.LogInformation("Review {ReviewId} created for product {ProductId} with rating {Rating}",
+            review.Id.ToString(), cmd.ProductId, cmd.Rating);
+
         return review.Id.ToString();
     }
 }

@@ -1,4 +1,5 @@
-﻿using AutoMapper;
+﻿using System.Diagnostics;
+using AutoMapper;
 using Catalog.Bll.Dtos;
 using Catalog.Bll.Interfaces;
 using Catalog.Bll.Queries;
@@ -7,6 +8,7 @@ using Catalog.Dal.Interfaces;
 using Catalog.Domain.Constants;
 using Catalog.Domain.Entities;
 using Catalog.Domain.Exceptions;
+using Microsoft.Extensions.Logging;
 
 namespace Catalog.Bll.Services;
 
@@ -15,13 +17,17 @@ public class PerfumeService : IPerfumeService
     private const string ChangedBy = "catalog-api";
     private const int MaxIds = 100;
 
+    private static readonly ActivitySource Source = new("Catalog.Bll");
+
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
+    private readonly ILogger<PerfumeService> _logger;
 
-    public PerfumeService(IUnitOfWork uow, IMapper mapper)
+    public PerfumeService(IUnitOfWork uow, IMapper mapper, ILogger<PerfumeService> logger)
     {
         _uow = uow;
         _mapper = mapper;
+        _logger = logger;
     }
 
     public async Task<PagedResultDto<PerfumeListItemDto>> GetListAsync(PerfumeQuery query, CancellationToken ct)
@@ -72,6 +78,9 @@ public class PerfumeService : IPerfumeService
 
     public async Task<PerfumeDto> CreateAsync(CreatePerfumeDto input, CancellationToken ct)
     {
+        using var activity = Source.StartActivity("CreatePerfume");
+        activity?.SetTag("brand.id", input.BrandId);
+
         var brand = await _uow.Brands.GetByIdAsync(input.BrandId, ct)
                     ?? throw new EntityNotFoundException($"Brand {input.BrandId} not found");
 
@@ -101,11 +110,18 @@ public class PerfumeService : IPerfumeService
         await _uow.Perfumes.AddAsync(perfume, ct);
         await _uow.SaveChangesAsync(ct);
 
+        activity?.SetTag("perfume.id", perfume.Id);
+        _logger.LogInformation("Perfume {PerfumeId} created: brand {BrandId}, price {Price}, season {Season}",
+            perfume.Id, brand.Id, input.Price, input.Season);
+
         return await GetByIdAsync(perfume.Id, ct);
     }
 
     public async Task<PerfumeDto> UpdateAsync(int id, UpdatePerfumeDto input, CancellationToken ct)
     {
+        using var activity = Source.StartActivity("UpdatePerfume");
+        activity?.SetTag("perfume.id", id);
+
         var perfume = await _uow.Perfumes.GetWithDetailsAsync(id, ct)
                       ?? throw new EntityNotFoundException($"Perfume {id} not found");
 
@@ -131,27 +147,44 @@ public class PerfumeService : IPerfumeService
         }
 
         await _uow.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Perfume {PerfumeId} updated: price {Price}, season {Season}, active {IsActive}",
+            id, perfume.Price, perfume.Season, perfume.IsActive);
+
         return _mapper.Map<PerfumeDto>(perfume);
     }
 
     public async Task<PerfumeDto> ChangePriceAsync(int id, ChangePriceDto input, CancellationToken ct)
     {
+        using var activity = Source.StartActivity("ChangePerfumePrice");
+        activity?.SetTag("perfume.id", id);
+
         var perfume = await _uow.Perfumes.GetWithDetailsAsync(id, ct)
                       ?? throw new EntityNotFoundException($"Perfume {id} not found");
 
+        var oldPrice = perfume.Price;
         perfume.ChangePrice(input.Price, ChangedBy);
 
         await _uow.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Perfume {PerfumeId} price changed from {OldPrice} to {NewPrice}",
+            id, oldPrice, perfume.Price);
+
         return _mapper.Map<PerfumeDto>(perfume);
     }
 
     public async Task DeleteAsync(int id, CancellationToken ct)
     {
+        using var activity = Source.StartActivity("DeletePerfume");
+        activity?.SetTag("perfume.id", id);
+
         var perfume = await _uow.Perfumes.GetWithDetailsAsync(id, ct)
                       ?? throw new EntityNotFoundException($"Perfume {id} not found");
 
         perfume.MarkDeleted(ChangedBy);
         await _uow.SaveChangesAsync(ct);
+
+        _logger.LogInformation("Perfume {PerfumeId} deleted", id);
     }
 
     private static string? Canonical(string? value, string[] allowed, string field)

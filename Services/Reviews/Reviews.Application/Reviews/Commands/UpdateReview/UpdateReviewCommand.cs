@@ -1,5 +1,6 @@
 ﻿using AutoMapper;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using MongoDB.Bson;
 using Reviews.Application.Common.Messaging;
 using Reviews.Application.Reviews.Dtos;
@@ -17,7 +18,8 @@ public record UpdateReviewCommand(
     string? Text,
     ScentProfileDto? ScentProfile) : ICommand<ReviewDetailsDto>;
 
-public class UpdateReviewCommandHandler(IReviewRepository reviews, IMapper mapper)
+public class UpdateReviewCommandHandler(
+    IReviewRepository reviews, IMapper mapper, ILogger<UpdateReviewCommandHandler> logger)
     : IRequestHandler<UpdateReviewCommand, ReviewDetailsDto>
 {
     public async Task<ReviewDetailsDto> Handle(UpdateReviewCommand cmd, CancellationToken ct)
@@ -32,6 +34,9 @@ public class UpdateReviewCommandHandler(IReviewRepository reviews, IMapper mappe
         review.Update(cmd.Rating, cmd.Title, cmd.Text, cmd.ScentProfile.ToDomain());
 
         await reviews.UpdateAsync(review, ct);
+
+        logger.LogInformation("Review {ReviewId} updated: rating {Rating}, version {Version}",
+            cmd.Id, review.Rating, review.Version);
 
         return mapper.Map<ReviewDetailsDto>(review);
     }
