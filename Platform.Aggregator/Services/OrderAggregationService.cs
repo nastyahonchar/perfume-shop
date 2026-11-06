@@ -12,6 +12,8 @@ public class OrderAggregationService(
 {
     private static readonly ActivitySource Source = new("Platform.Aggregator");
 
+    private static readonly TimeSpan DownstreamTimeout = TimeSpan.FromSeconds(5);
+
     public async Task<FullOrderDto?> GetFullOrderAsync(long orderId, CancellationToken ct)
     {
         using var activity = Source.StartActivity("GetFullOrder");
@@ -28,8 +30,10 @@ public class OrderAggregationService(
 
         var productIds = order.Items.Select(i => i.ProductId).Distinct().ToList();
 
-        var productsTask = SafeAsync(() => catalog.GetProductsAsync(productIds, ct), "catalog-api", warnings, ct);
-        var reviewsTask = SafeAsync(() => reviews.GetForProductsAsync(productIds, ct), "reviews-api", warnings, ct);
+        var productsTask = SafeAsync(
+            token => catalog.GetProductsAsync(productIds, token), "catalog-api", warnings, ct);
+        var reviewsTask = SafeAsync(
+            token => reviews.GetForProductsAsync(productIds, token), "reviews-api", warnings, ct);
 
         await Task.WhenAll(productsTask, reviewsTask);
 
@@ -57,9 +61,12 @@ public class OrderAggregationService(
 
     private async Task<OrderDto?> GetOrderAsync(long orderId, CancellationToken ct)
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(DownstreamTimeout);
+
         try
         {
-            return await orders.GetOrderAsync(orderId, ct);
+            return await orders.GetOrderAsync(orderId, deadline.Token);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
@@ -69,13 +76,16 @@ public class OrderAggregationService(
     }
 
     private async Task<T?> SafeAsync<T>(
-        Func<Task<T>> call, string service, List<string> warnings, CancellationToken ct)
+        Func<CancellationToken, Task<T>> call, string service, List<string> warnings, CancellationToken ct)
     {
         var stopwatch = Stopwatch.StartNew();
 
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        deadline.CancelAfter(DownstreamTimeout);
+
         try
         {
-            return await call();
+            return await call(deadline.Token);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
