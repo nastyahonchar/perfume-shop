@@ -883,21 +883,20 @@ dotnet test Services/Reviews/Reviews.Tests/Reviews.Tests.csproj
 
 ### Налаштування
 
-Секція `MongoDb` у `Services/Reviews/Reviews.WebApi/appsettings.json`:
+Рядок підключення задається ключем `ConnectionStrings:ReviewsDb` у `Services/Reviews/Reviews.WebApi/appsettings.json`. Назва ключа збігається з ім'ям бази `ReviewsDb` в `Platform.AppHost`. Під час запуску через Aspire рядок підставляється автоматично.
 
 ```json
 {
-  "MongoDb": {
-    "ConnectionString": "mongodb://localhost:27017/?maxPoolSize=50&serverSelectionTimeoutMS=5000",
-    "DatabaseName": "PerfumeReviewsDb"
+  "ConnectionStrings": {
+    "ReviewsDb": "mongodb://localhost:27017/PerfumeReviewsDb?maxPoolSize=50&serverSelectionTimeoutMS=5000"
   }
 }
 ```
 
-Параметри пулу з'єднань і таймаутів задано в рядку підключення. Налаштування можна перевизначити змінними оточення, наприклад:
+Параметри пулу з'єднань і таймаутів задано в рядку підключення. Перевизначити його можна змінною оточення:
 
 ```powershell
-$env:MongoDb__ConnectionString = "mongodb://localhost:27017"
+$env:ConnectionStrings__ReviewsDb = "mongodb://localhost:27017/PerfumeReviewsDb"
 ```
 
 ### Запуск
