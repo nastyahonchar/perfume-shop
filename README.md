@@ -1,6 +1,6 @@
 # Nota — інтернет-магазин парфумів
 
-Навчальний проєкт з дисципліни «Технології .NET розробки Web-додатків». Проєкт розвивається в межах лабораторних робіт: проєктування баз даних для мікросервісної архітектури (Лаб. 01), тришаровий Web API на ADO.NET і Dapper (Лаб. 02) тришаровий Web API на Entity Framework Core (Лаб. 03) та Clean Architecture з CQRS на MongoDB (Лаб. 04).
+Навчальний проєкт з дисципліни «Технології .NET розробки Web-додатків». Проєкт розвивається в межах лабораторних робіт: проєктування баз даних для мікросервісної архітектури (Лаб. 01), тришаровий Web API на ADO.NET і Dapper (Лаб. 02), тришаровий Web API на Entity Framework Core (Лаб. 03), Clean Architecture з CQRS на MongoDB (Лаб. 04) та мікросервісна платформа на .NET Aspire з API Gateway і Aggregator (Лаб. 05).
 
 ## Зміст
 
@@ -11,7 +11,7 @@
 - [Структура репозиторію](#структура-репозиторію)
 - [Лабораторна робота № 01: бази даних](#лабораторна-робота--01-бази-даних)
 - [Лабораторна робота № 02: Orders API](#лабораторна-робота--02-orders-api)
-- [Запуск через .NET Aspire](#запуск-через-net-aspire)
+- [Запуск платформи через .NET Aspire](#запуск-платформи-через-net-aspire)
 - [Ендпоінти API](#ендпоінти-api)
 - [Приклади запитів](#приклади-запитів)
 - [Перевірка обробки помилок і транзакцій](#перевірка-обробки-помилок-і-транзакцій)
@@ -25,6 +25,11 @@
 - [Ендпоінти Reviews API](#ендпоінти-reviews-api)
 - [Приклади запитів до Reviews API](#приклади-запитів-до-reviews-api)
 - [Перевірка Reviews API](#перевірка-reviews-api)
+- [Лабораторна робота № 05: Aspire-платформа](#лабораторна-робота--05-aspire-платформа)
+- [Архітектура платформи](#архітектура-платформи)
+- [Маршрути API Gateway](#маршрути-api-gateway)
+- [Aggregator і часткові відповіді](#aggregator-і-часткові-відповіді)
+- [Спостережуваність: логи, трейси, CorrelationId](#спостережуваність-логи-трейси-correlationid)
 - [Git-процес](#git-процес)
 
 ## Опис предметної області
@@ -138,6 +143,9 @@ perfume-shop/
 │       └── queries.js
 ├── Platform.slnx
 ├── Platform.AppHost/
+├── Platform.ServiceDefaults/
+├── Platform.ApiGateway/
+├── Platform.Aggregator/
 └── Services/
     ├── Orders/
     │   ├── Orders.Api/
@@ -157,7 +165,7 @@ perfume-shop/
         └── Reviews.Tests/
 ```
 
-`Platform.slnx`, `Platform.AppHost` і `Services/Orders` — рішення Лабораторної роботи № 02; `Services/Catalog` додано в Лабораторній роботі № 03, `Services/Reviews` — у Лабораторній роботі № 04.
+`Platform.slnx`, `Platform.AppHost` і `Services/Orders` — рішення Лабораторної роботи № 02; `Services/Catalog` додано в Лабораторній роботі № 03, `Services/Reviews` — у Лабораторній роботі № 04; `Platform.ServiceDefaults`, `Platform.ApiGateway`, `Platform.Aggregator` та оновлений `Platform.AppHost` — у Лабораторній роботі № 05.
 
 ## Лабораторна робота № 01: бази даних
 
@@ -233,7 +241,7 @@ Orders API надає HTTP-інтерфейс для роботи з клієн�
 | `Orders.Bll` | Сервіси, бізнес-правила, DTO, AutoMapper і бізнес-валідація |
 | `Orders.Dal` | Репозиторії, параметризовані SQL-запити, ADO.NET, Dapper і Unit of Work |
 | `Orders.Domain` | Доменні моделі, константи й доменні винятки |
-| `Platform.AppHost` | Запуск API та підключення до бази через .NET Aspire |
+| `Platform.AppHost` | Оркестрація всієї платформи через .NET Aspire (від Лаб. 05: усі сервіси, SQL Server і MongoDB у контейнерах, Gateway, Aggregator) |
 
 ### Доступ до даних
 
@@ -280,51 +288,80 @@ Orders API надає HTTP-інтерфейс для роботи з клієн�
 | `BusinessConflictException` | `409 Conflict` | недопустимий перехід статусу, нестача залишку, дубль email |
 | інші винятки | `500 Internal Server Error` | клієнту повертається загальний опис, деталі пишуться в лог |
 
-## Запуск через .NET Aspire
+## Запуск платформи через .NET Aspire
+
+Від Лабораторної роботи № 05 усю систему (три сервіси, Aggregator, API Gateway і обидві бази даних) запускає один проєкт `Platform.AppHost`. Режиму `UseSqlContainer` більше немає: SQL Server і MongoDB завжди працюють у контейнерах.
 
 ### Передумови
 
 - .NET 9 SDK (перевірка: `dotnet --list-sdks`).
-- Visual Studio 2022 (17.14 або новіша) із навантаженням **ASP.NET and web development** або .NET CLI.
-- SQL Server LocalDB або інший локальний SQL Server.
-- Docker Desktop — лише для варіанта з SQL Server у контейнері.
+- Docker Desktop (запущений; на Windows — з WSL 2). Перевірка: `docker version`.
+- Visual Studio 2022 (17.14 або новіша) або .NET CLI.
+- Для застосування SQL-скриптів: `sqlcmd` або SSMS / Azure Data Studio.
 
-### Два режими бази даних
+### Пароль SQL Server
 
-Режим вибирає параметр `UseSqlContainer` у `Platform.AppHost/appsettings.json`.
-
-| Режим | `UseSqlContainer` | База |
-|---|---|---|
-| Існуюча база (за замовчуванням) | `false` | Підключення до `PerfumeOrdersDb` за рядком `ConnectionStrings:OrdersDb` із `Platform.AppHost/appsettings.json` (за замовчуванням LocalDB) |
-| SQL Server у контейнері | `true` | Aspire створює контейнер із томом даних і порожню базу `PerfumeOrdersDb` |
-
-**Підготовка бази.** В обох режимах до бази потрібно застосувати `db/p1/schema.sql`, `db/p1/procedures.sql` і `db/p1/seed.sql` (у SSMS або через `sqlcmd`). У режимі контейнера адресу й порт SQL Server видно в Aspire Dashboard, порожній контейнер таблиць не містить. У режимі існуючої бази достатньо один раз виконати ці скрипти на своєму SQL Server.
-
-Увімкнути контейнер без редагування файлу можна змінною оточення:
+Пароль SQL Server — секретний параметр Aspire `sql-password`. У репозиторії його немає, його зберігають у User Secrets проєкту `Platform.AppHost` (один раз на машині):
 
 ```powershell
-$env:UseSqlContainer = "true"
+dotnet user-secrets set "Parameters:sql-password" "<ваш_складний_пароль>" --project Platform.AppHost
 ```
+
+Пароль має відповідати вимогам SQL Server (мінімум 8 символів, великі й малі літери, цифри).
 
 ### Запуск усієї системи
 
 З кореня репозиторію:
 
 ```powershell
-dotnet run --project Platform.AppHost
+dotnet run --project Platform.AppHost --launch-profile https
 ```
 
-Aspire Dashboard відкривається за адресою з консолі (за замовчуванням `https://localhost:17062`). У ньому API `orders-api` і ресурс бази мають статус `Running`. Адресу API беріть з колонки **Endpoints**, Swagger доступний за шляхом `/swagger`.
+Aspire Dashboard відкривається за адресою з консолі (`https://localhost:17062`). Через 1–2 хвилини (перший запуск довше через завантаження образів) усі ресурси мають статус `Running`:
 
-### Рядок підключення
+| Ресурс | Тип | Призначення |
+|---|---|---|
+| `sql` | контейнер SQL Server | сервер баз Orders і Catalog (дані в томі) |
+| `mongo` | контейнер MongoDB | сервер бази відгуків (дані в томі) |
+| `OrdersDb`, `CatalogDb`, `ReviewsDb` | бази даних | підключаються до сервісів через `WithReference` |
+| `orders-api` | проєкт | сервіс замовлень, клієнтів і товарів |
+| `catalog-api` | проєкт | сервіс каталогу парфумів |
+| `reviews-api` | проєкт | сервіс відгуків |
+| `aggregator` | проєкт | зведені відповіді з кількох сервісів |
+| `gateway` | проєкт | єдина точка входу, `http://localhost:5000` |
 
-Рядок підключення зберігається в `appsettings.json` і перевизначається змінною оточення (подвійне підкреслення замість двокрапки):
+Контейнери мають постійний час життя (`Persistent`) і томи даних, тому після зупинки платформи дані зберігаються.
+
+### Підготовка бази Orders
+
+`Catalog API` і `Reviews API` самі застосовують міграції та початкові дані. База `OrdersDb` створюється порожньою, схему й дані потрібно один раз застосувати зі скриптів `db/p1` до SQL Server у контейнері. Порт і рядок підключення беріть із Dashboard (ресурс `sql`, деталі → Connection string / Endpoints):
 
 ```powershell
-$env:ConnectionStrings__OrdersDb = "Server=localhost;Database=PerfumeOrdersDb;Trusted_Connection=True;TrustServerCertificate=True"
+sqlcmd -S "localhost,<порт>" -U sa -P "<пароль>" -C -d OrdersDb -i db/p1/schema.sql
+sqlcmd -S "localhost,<порт>" -U sa -P "<пароль>" -C -d OrdersDb -i db/p1/procedures.sql
+sqlcmd -S "localhost,<порт>" -U sa -P "<пароль>" -C -d OrdersDb -i db/p1/seed.sql
 ```
 
-Паролі й інші секрети в репозиторій не додаються.
+### Усі запити — через Gateway
+
+Клієнти звертаються лише до `http://localhost:5000`; внутрішні порти сервісів напряму використовувати не потрібно:
+
+```powershell
+curl.exe -i http://localhost:5000/api/customers
+curl.exe -i http://localhost:5000/api/perfumes
+curl.exe -i http://localhost:5000/api/reviews
+curl.exe -i http://localhost:5000/api/aggregator/orders/1/full
+```
+
+Власний ідентифікатор кореляції можна передати заголовком; він повернеться у відповіді й пошириться на всі сервіси:
+
+```powershell
+curl.exe -i -H "X-Correlation-Id: my-test-123" http://localhost:5000/api/aggregator/orders/1/full
+```
+
+### Запуск окремих сервісів без Aspire
+
+Сервіси можна запускати й поза платформою (див. розділи «Запуск API без Aspire», «Запуск Catalog API», «Запуск Reviews API»). Тоді використовуються рядки підключення з `appsettings.json` кожного сервісу (LocalDB, `localhost:27017`).
 
 ### Запуск API без Aspire
 
@@ -846,21 +883,20 @@ dotnet test Services/Reviews/Reviews.Tests/Reviews.Tests.csproj
 
 ### Налаштування
 
-Секція `MongoDb` у `Services/Reviews/Reviews.WebApi/appsettings.json`:
+Рядок підключення задається ключем `ConnectionStrings:ReviewsDb` у `Services/Reviews/Reviews.WebApi/appsettings.json`. Назва ключа збігається з ім'ям бази `ReviewsDb` в `Platform.AppHost`. Під час запуску через Aspire рядок підставляється автоматично.
 
 ```json
 {
-  "MongoDb": {
-    "ConnectionString": "mongodb://localhost:27017/?maxPoolSize=50&serverSelectionTimeoutMS=5000",
-    "DatabaseName": "PerfumeReviewsDb"
+  "ConnectionStrings": {
+    "ReviewsDb": "mongodb://localhost:27017/PerfumeReviewsDb?maxPoolSize=50&serverSelectionTimeoutMS=5000"
   }
 }
 ```
 
-Параметри пулу з'єднань і таймаутів задано в рядку підключення. Налаштування можна перевизначити змінними оточення, наприклад:
+Параметри пулу з'єднань і таймаутів задано в рядку підключення. Перевизначити його можна змінною оточення:
 
 ```powershell
-$env:MongoDb__ConnectionString = "mongodb://localhost:27017"
+$env:ConnectionStrings__ReviewsDb = "mongodb://localhost:27017/PerfumeReviewsDb"
 ```
 
 ### Запуск
@@ -960,6 +996,67 @@ curl.exe -i "$BASE/api/reviews/000000000000000000000000"
 | Видалення | `DELETE /api/reviews/{id}` | `204` |
 | Індекси | `db.reviews.getIndexes()` у `mongosh` | шість індексів, зокрема `ux_reviews_product_author` |
 
+## Лабораторна робота № 05: Aspire-платформа
+
+Мікросервіси Orders, Catalog і Reviews об'єднано в одну платформу на .NET Aspire. Додано спільну бібліотеку `Platform.ServiceDefaults`, API Gateway на YARP та Aggregator, який збирає дані з кількох сервісів в одну відповідь.
+
+### Компоненти
+
+| Проєкт | Призначення |
+|---|---|
+| `Platform.AppHost` | Оркестрація: контейнери SQL Server і MongoDB з томами, секретний параметр `sql-password`, сервіси, Gateway, Aggregator; `WithReference` і `WaitFor` задають залежності |
+| `Platform.ServiceDefaults` | Спільні налаштування: Serilog (структуровані JSON-логи), CorrelationId (middleware і `DelegatingHandler`), OpenTelemetry (трейси й метрики), health-ендпоінти, service discovery, стандартна стійкість HTTP-клієнтів |
+| `Platform.ApiGateway` | YARP-проксі: маршрути й кластери в `appsettings.json`, виявлення сервісів через Aspire |
+| `Platform.Aggregator` | Типізовані `HttpClient` до Orders, Catalog, Reviews; паралельні виклики через `Task.WhenAll`; складена відповідь `FullOrderDto` |
+| `Services/*` | Мінімальні зміни: `AddServiceDefaults()`, `CorrelationIdMiddleware`, `MapDefaultEndpoints()` |
+
+### Архітектура платформи
+
+```text
+Клієнт ──► Gateway (:5000) ──► orders-api  ──► SQL Server (OrdersDb)
+                          ├──► catalog-api ──► SQL Server (CatalogDb)
+                          ├──► reviews-api ──► MongoDB   (ReviewsDb)
+                          └──► aggregator  ──► orders-api, catalog-api, reviews-api
+```
+
+Адреси сервісів у коді не прописані: Gateway і Aggregator звертаються за іменами (`http://orders-api`, `https+http://catalog-api` тощо), а Aspire підставляє реальні адреси через service discovery.
+
+### Маршрути API Gateway
+
+| Шлях через Gateway | Куди проксується |
+|---|---|
+| `/api/aggregator/**` | `aggregator` |
+| `/api/orders/**`, `/api/customers/**`, `/api/products/**` | `orders-api` |
+| `/api/perfumes/**`, `/api/brands/**`, `/api/notes/**` | `catalog-api` |
+| `/api/reviews/**` | `reviews-api` |
+
+### Aggregator і часткові відповіді
+
+Ендпоінт: `GET /api/aggregator/orders/{id}/full`. Aggregator читає замовлення з Orders, потім **паралельно** (`Task.WhenAll`) отримує дані товарів із Catalog та відгуки з Reviews і збирає `FullOrderDto`.
+
+| Ситуація | Відповідь |
+|---|---|
+| Усі сервіси доступні | `200 OK`, повна відповідь |
+| Замовлення не існує | `404 Not Found` |
+| `orders-api` недоступний | `503 Service Unavailable`, `ProblemDetails` (`"orders-api is unavailable"`) |
+| `catalog-api` або `reviews-api` недоступний | `200 OK`, відповідні блоки порожні, у масиві `warnings` — рядок на кшталт `"reviews-api is unavailable"` |
+
+Кожен виклик має обмеження 5 секунд (`DownstreamTimeout`), тому повільний або зупинений сервіс не блокує відповідь на 30 секунд.
+
+Перевірка часткової відповіді:
+
+1. У Dashboard зупиніть ресурс `reviews-api` (кнопка Stop).
+2. Виконайте `curl.exe -i http://localhost:5000/api/aggregator/orders/1/full` — буде `200` і `warnings: ["reviews-api is unavailable"]`.
+3. Запустіть `reviews-api` знову (Start) — відповідь знову повна, без `warnings`.
+4. Для перевірки `503` зупиніть `orders-api`.
+
+### Спостережуваність: логи, трейси, CorrelationId
+
+- **Логи.** Serilog пише структуровані логи з властивостями `ServiceName`, `EnvironmentName`, `MachineName`, `ThreadId`, `CorrelationId`. Дивитись: Dashboard → **Structured**.
+- **CorrelationId.** Gateway приймає заголовок `X-Correlation-Id` або генерує новий, передає його сервісам (включно з викликами Aggregator → сервіси) і повертає у відповіді (один раз). Для пошуку всіх логів одного запиту у Dashboard → **Structured** додайте фільтр `CorrelationId = <значення>`.
+- **Трейси.** Dashboard → **Traces** → запит `aggregator`: видно спани Gateway → Aggregator → Orders/Catalog/Reviews, включно зі спанами SQL Server, MongoDB і бізнес-спанами (`Orders.Bll`, `Catalog.Bll`, `Reviews.Application`).
+- **Health.** Кожен сервіс має `/health` (готовність) і `/alive` (живість) у режимі розробки.
+
 ## Git-процес
 
 Для розробки використовується така модель гілок:
@@ -968,6 +1065,7 @@ curl.exe -i "$BASE/api/reviews/000000000000000000000000"
 - `develop` — інтеграційна гілка;
 - `feature/lab-02-orders-service` — зміни для Лабораторної роботи № 02;
 - `feature/lab-03-catalog-service` — зміни для Лабораторної роботи № 03;
-- `feature/lab-04-reviews-service` — зміни для Лабораторної роботи № 04.
+- `feature/lab-04-reviews-service` — зміни для Лабораторної роботи № 04;
+- `feature/lab-05-aspire-platform` — зміни для Лабораторної роботи № 05.
 
 Зміни з feature-гілки потрапляють у `develop`, а з `develop` у `main` через Pull Request з описом.

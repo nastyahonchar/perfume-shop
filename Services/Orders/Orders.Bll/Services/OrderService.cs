@@ -1,5 +1,7 @@
 ﻿using System.Data;
+using System.Diagnostics;
 using AutoMapper;
+using Microsoft.Extensions.Logging;
 using Orders.Bll.Dtos;
 using Orders.Bll.Interfaces;
 using Orders.Dal.Interfaces;
@@ -13,13 +15,17 @@ public class OrderService : IOrderService
 {
     private const string ChangedBy = "orders-api";
 
+    private static readonly ActivitySource Source = new("Orders.Bll");
+
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
+    private readonly ILogger<OrderService> _logger;
 
-    public OrderService(IUnitOfWork uow, IMapper mapper)
+    public OrderService(IUnitOfWork uow, IMapper mapper, ILogger<OrderService> logger)
     {
         _uow = uow;
         _mapper = mapper;
+        _logger = logger;
     }
 
     public async Task<OrderDto> GetByIdAsync(long id, CancellationToken ct)
@@ -46,8 +52,12 @@ public class OrderService : IOrderService
             items.Select(i => _mapper.Map<OrderSummaryDto>(i)).ToList(), total, page, pageSize);
     }
 
-    public Task<OrderDto> CreateAsync(CreateOrderDto input, CancellationToken ct)
-        => ExecuteInTransactionAsync(async () =>
+    public async Task<OrderDto> CreateAsync(CreateOrderDto input, CancellationToken ct)
+    {
+        using var activity = Source.StartActivity("CreateOrder");
+        activity?.SetTag("customer.id", input.CustomerId);
+
+        var order = await ExecuteInTransactionAsync(async () =>
         {
             var customer = await _uow.Customers.GetByIdAsync(input.CustomerId, ct)
                            ?? throw new NotFoundException($"Customer {input.CustomerId} not found");
@@ -75,6 +85,14 @@ public class OrderService : IOrderService
             return _mapper.Map<OrderDto>(created);
         }, ct);
 
+        activity?.SetTag("order.id", order.Id);
+        _logger.LogInformation(
+            "Order {OrderId} created for customer {CustomerId}: {ItemsCount} items, total {TotalAmount}, status {Status}",
+            order.Id, order.CustomerId, order.Items.Count, order.TotalAmount, order.Status);
+
+        return order;
+    }
+
     public async Task<OrderDto> UpdateDetailsAsync(long id, UpdateOrderDto input, CancellationToken ct)
     {
         var order = await _uow.Orders.GetWithItemsAsync(id, ct)
@@ -87,11 +105,19 @@ public class OrderService : IOrderService
         order.Comment = string.IsNullOrWhiteSpace(input.Comment) ? null : input.Comment.Trim();
 
         await _uow.Orders.UpdateAsync(order, ct);
+
+        _logger.LogInformation("Order {OrderId} details updated, status {Status}", id, order.Status);
         return _mapper.Map<OrderDto>(order);
     }
 
-    public Task ConfirmOrderAsync(long orderId, CancellationToken ct)
-        => ExecuteInTransactionAsync(async () =>
+    public async Task ConfirmOrderAsync(long orderId, CancellationToken ct)
+    {
+        using var activity = Source.StartActivity("ConfirmOrder");
+        activity?.SetTag("order.id", orderId);
+
+        var itemsCount = 0;
+
+        await ExecuteInTransactionAsync(async () =>
         {
             var order = await _uow.Orders.GetWithItemsAsync(orderId, ct)
                         ?? throw new NotFoundException($"Order {orderId} not found");
@@ -99,8 +125,13 @@ public class OrderService : IOrderService
             if (order.Items.Count == 0)
                 throw new BusinessConflictException($"Order {orderId} has no items");
 
+            itemsCount = order.Items.Count;
             await _uow.Orders.ConfirmAsync(orderId, ChangedBy, ct);
         }, ct);
+
+        _logger.LogInformation("Order {OrderId} confirmed, {ItemsCount} items, status {Status}",
+            orderId, itemsCount, OrderStatus.StockConfirmed);
+    }
 
     public async Task ChangeStatusAsync(long orderId, string newStatus, CancellationToken ct)
     {
@@ -113,8 +144,14 @@ public class OrderService : IOrderService
             return;
         }
 
+        using var activity = Source.StartActivity("ChangeOrderStatus");
+        activity?.SetTag("order.id", orderId);
+        activity?.SetTag("order.status", newStatus);
+
         await ExecuteInTransactionAsync(
             () => _uow.Orders.ChangeStatusAsync(orderId, newStatus, ChangedBy, ct), ct);
+
+        _logger.LogInformation("Order {OrderId} status changed to {Status}", orderId, newStatus);
     }
 
     public async Task DeleteAsync(long id, CancellationToken ct)
@@ -126,6 +163,8 @@ public class OrderService : IOrderService
             throw new BusinessConflictException("Only a Submitted or Cancelled order can be deleted");
 
         await _uow.Orders.DeleteAsync(id, ct);
+
+        _logger.LogInformation("Order {OrderId} deleted, status was {Status}", id, order.Status);
     }
 
     private async Task<T> ExecuteInTransactionAsync<T>(Func<Task<T>> action, CancellationToken ct)

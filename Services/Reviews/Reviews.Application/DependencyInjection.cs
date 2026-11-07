@@ -12,13 +12,14 @@ public static class DependencyInjection
 
         services.AddMediatR(cfg =>
         {
-            cfg.RegisterServicesFromAssembly(assembly);                  
-            cfg.AddOpenBehavior(typeof(LoggingBehavior<,>));               
-            cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));         
-            cfg.AddOpenBehavior(typeof(PerformanceBehavior<,>));       
+            cfg.RegisterServicesFromAssembly(assembly);
+            cfg.AddOpenBehavior(typeof(TracingBehavior<,>));
+            cfg.AddOpenBehavior(typeof(LoggingBehavior<,>));
+            cfg.AddOpenBehavior(typeof(ValidationBehavior<,>));
+            cfg.AddOpenBehavior(typeof(PerformanceBehavior<,>));
         });
 
-        services.AddValidatorsFromAssembly(assembly);                      
+        services.AddValidatorsFromAssembly(assembly);
 
         return services;
     }

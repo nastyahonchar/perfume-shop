@@ -1,22 +1,29 @@
+using MongoDB.Driver;
+using Platform.ServiceDefaults;
 using Reviews.Application;
 using Reviews.Application.Reviews.Mapping;
 using Reviews.Infrastructure;
 using Reviews.Infrastructure.Seeding;
 using Reviews.WebApi.Middleware;
 using Serilog;
-using Serilog.Context;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Host.UseSerilog((ctx, cfg) => cfg
-    .ReadFrom.Configuration(ctx.Configuration)
-    .Enrich.FromLogContext()
-    .WriteTo.Console(outputTemplate:
-        "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj} {Properties:j}{NewLine}{Exception}"));
+builder.AddServiceDefaults();
+
+var reviewsConnection = builder.Configuration.GetConnectionString("ReviewsDb");
+if (!string.IsNullOrWhiteSpace(reviewsConnection))
+{
+    builder.Configuration["MongoDb:ConnectionString"] = reviewsConnection;
+
+    var databaseName = MongoUrl.Create(reviewsConnection).DatabaseName;
+    if (!string.IsNullOrWhiteSpace(databaseName))
+        builder.Configuration["MongoDb:DatabaseName"] = databaseName;
+}
 
 builder.Services
-    .AddApplication()                          
-    .AddInfrastructure(builder.Configuration); 
+    .AddApplication()
+    .AddInfrastructure(builder.Configuration);
 
 builder.Services.AddAutoMapper(cfg => cfg.AddMaps(typeof(ReviewProfile).Assembly));
 
@@ -34,18 +41,7 @@ var app = builder.Build();
 if (!app.Environment.IsProduction())
     await app.Services.SeedDatabaseAsync();
 
-app.Use(async (ctx, next) =>
-{
-    var correlationId = ctx.Request.Headers["X-Correlation-Id"].FirstOrDefault() ?? ctx.TraceIdentifier;
-    ctx.Response.Headers["X-Correlation-Id"] = correlationId;
-
-    using (LogContext.PushProperty("CorrelationId", correlationId))
-    using (LogContext.PushProperty("RequestPath", ctx.Request.Path.Value))
-    {
-        await next();
-    }
-});
-
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseSerilogRequestLogging();
 app.UseExceptionHandler();
 
@@ -56,5 +52,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
+app.MapDefaultEndpoints();
 
 app.Run();
