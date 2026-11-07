@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using Catalog.Bll.Caching;
 using Catalog.Bll.Dtos;
 using Catalog.Bll.Interfaces;
 using Catalog.Bll.Specifications;
@@ -12,18 +13,21 @@ public class BrandService : IBrandService
 {
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
+    private readonly ICatalogCache _cache;
 
-    public BrandService(IUnitOfWork uow, IMapper mapper)
+    public BrandService(IUnitOfWork uow, IMapper mapper, ICatalogCache cache)
     {
         _uow = uow;
         _mapper = mapper;
+        _cache = cache;
     }
 
     public async Task<IReadOnlyList<BrandDto>> GetAllAsync(CancellationToken ct)
-    {
-        var brands = await _uow.Brands.GetAllAsync(ct);
-        return brands.OrderBy(b => b.Name).Select(b => _mapper.Map<BrandDto>(b)).ToList();
-    }
+        => await _cache.GetOrCreateAsync<IReadOnlyList<BrandDto>>(CacheKeys.Brands, CacheProfiles.Reference, async token =>
+        {
+            var brands = await _uow.Brands.GetAllAsync(token);
+            return brands.OrderBy(b => b.Name).Select(b => _mapper.Map<BrandDto>(b)).ToList();
+        }, ct) ?? [];
 
     public async Task<BrandDto> GetByIdAsync(int id, CancellationToken ct)
     {
