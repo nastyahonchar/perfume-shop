@@ -168,6 +168,7 @@ public class PerfumeService : IPerfumeService
         }
 
         await _uow.SaveChangesAsync(ct);
+        await InvalidateProductAsync(id, "ProductUpdated", ct);
 
         _logger.LogInformation("Perfume {PerfumeId} updated: price {Price}, season {Season}, active {IsActive}",
             id, perfume.Price, perfume.Season, perfume.IsActive);
@@ -187,6 +188,7 @@ public class PerfumeService : IPerfumeService
         perfume.ChangePrice(input.Price, ChangedBy);
 
         await _uow.SaveChangesAsync(ct);
+        await InvalidateProductAsync(id, "PriceChanged", ct);
 
         _logger.LogInformation("Perfume {PerfumeId} price changed from {OldPrice} to {NewPrice}",
             id, oldPrice, perfume.Price);
@@ -204,9 +206,13 @@ public class PerfumeService : IPerfumeService
 
         perfume.MarkDeleted(ChangedBy);
         await _uow.SaveChangesAsync(ct);
+        await InvalidateProductAsync(id, "ProductDeleted", ct);
 
         _logger.LogInformation("Perfume {PerfumeId} deleted", id);
     }
+
+    private Task InvalidateProductAsync(int id, string reason, CancellationToken ct)
+    => _cache.RemoveAsync([CacheKeys.Product(id), CacheKeys.ProductItem(id)], reason, ct);
 
     private static string? Canonical(string? value, string[] allowed, string field)
     {

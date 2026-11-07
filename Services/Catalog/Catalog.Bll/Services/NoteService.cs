@@ -68,6 +68,8 @@ public class NoteService : INoteService
         var note = new Note { Name = name, Family = family };
         await _uow.Notes.AddAsync(note, ct);
         await _uow.SaveChangesAsync(ct);
+        var keys = NoteFamilies.All.Select(f => CacheKeys.Notes(f)).Append(CacheKeys.Notes(null)).ToList();
+        await _cache.RemoveAsync(keys, "NoteCreated", ct);
         return _mapper.Map<NoteDto>(note);
     }
 }

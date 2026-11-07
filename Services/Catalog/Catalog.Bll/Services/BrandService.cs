@@ -6,6 +6,7 @@ using Catalog.Bll.Specifications;
 using Catalog.Dal.Interfaces;
 using Catalog.Domain.Entities;
 using Catalog.Domain.Exceptions;
+using Catalog.Bll.Specifications;
 
 namespace Catalog.Bll.Services;
 
@@ -51,6 +52,7 @@ public class BrandService : IBrandService
 
         await _uow.Brands.AddAsync(brand, ct);
         await _uow.SaveChangesAsync(ct);
+        await _cache.RemoveAsync([CacheKeys.Brands], "BrandCreated", ct);
         return _mapper.Map<BrandDto>(brand);
     }
 
@@ -69,6 +71,16 @@ public class BrandService : IBrandService
         brand.FoundedYear = input.FoundedYear;
 
         await _uow.SaveChangesAsync(ct);
+        var perfumes = await _uow.Perfumes.ListAsync(new PerfumesByBrandSpec(id), ct);
+
+        var keys = new List<string> { CacheKeys.Brands };
+        foreach (var perfume in perfumes)
+        {
+            keys.Add(CacheKeys.Product(perfume.Id));
+            keys.Add(CacheKeys.ProductItem(perfume.Id));
+        }
+
+        await _cache.RemoveAsync(keys, "BrandUpdated", ct);
         return _mapper.Map<BrandDto>(brand);
     }
 }
