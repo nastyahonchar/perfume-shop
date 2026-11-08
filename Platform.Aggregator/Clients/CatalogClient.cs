@@ -1,27 +1,47 @@
 ﻿using System.Diagnostics;
+using Catalog.Grpc;
+using Grpc.Core;
 using Platform.Aggregator.Models;
 
 namespace Platform.Aggregator.Clients;
 
-public class CatalogClient(HttpClient http, ILogger<CatalogClient> logger)
+public class CatalogClient(CatalogService.CatalogServiceClient grpc, ILogger<CatalogClient> logger)
 {
     private const string ServiceName = "catalog-api";
 
     public async Task<IReadOnlyList<ProductDto>> GetProductsAsync(
         IReadOnlyCollection<long> productIds, CancellationToken ct)
     {
-        if (productIds.Count == 0)
+        var ids = productIds.Where(id => id is > 0 and <= int.MaxValue).Select(id => (int)id).ToList();
+        if (ids.Count == 0)
             return [];
 
-        logger.LogInformation("Calling {Service} for {ProductsCount} products", ServiceName, productIds.Count);
+        logger.LogInformation("Calling {Service} gRPC GetProductsByIds for {ProductsCount} products",
+            ServiceName, ids.Count);
         var stopwatch = Stopwatch.StartNew();
 
-        var query = string.Join("&", productIds.Select(id => $"ids={id}"));
-        var products = await http.GetFromJsonAsync<List<ProductDto>>($"/api/perfumes/by-ids?{query}", ct) ?? [];
+        var request = new GetProductsByIdsRequest();
+        request.Ids.AddRange(ids);
 
-        logger.LogInformation("{Service} responded in {Elapsed} ms with {ProductsCount} products",
-            ServiceName, stopwatch.ElapsedMilliseconds, products.Count);
+        try
+        {
+            var reply = await grpc.GetProductsByIdsAsync(
+                request, deadline: GrpcDefaults.Deadline(), cancellationToken: ct);
 
-        return products;
+            logger.LogInformation("{Service} responded {GrpcStatus} in {Elapsed} ms with {ProductsCount} products",
+                ServiceName, StatusCode.OK, stopwatch.ElapsedMilliseconds, reply.Products.Count);
+
+            return reply.Products.Select(ToDto).ToList();
+        }
+        catch (RpcException ex)
+        {
+            logger.LogWarning("{Service} failed with {GrpcStatus} in {Elapsed} ms",
+                ServiceName, ex.StatusCode, stopwatch.ElapsedMilliseconds);
+            throw;
+        }
     }
+
+    private static ProductDto ToDto(ProductReply p) => new(
+        p.Id, p.Brand, p.Name, p.Sku, p.Gender, p.Concentration, p.Season,
+        (short)p.VolumeMl, (decimal)p.Price, p.IsActive);
 }

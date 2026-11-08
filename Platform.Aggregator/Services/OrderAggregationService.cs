@@ -1,4 +1,5 @@
 ﻿using System.Diagnostics;
+using Grpc.Core;
 using Platform.Aggregator.Clients;
 using Platform.Aggregator.Models;
 
@@ -11,8 +12,6 @@ public class OrderAggregationService(
     ILogger<OrderAggregationService> logger)
 {
     private static readonly ActivitySource Source = new("Platform.Aggregator");
-
-    private static readonly TimeSpan DownstreamTimeout = TimeSpan.FromSeconds(5);
 
     public async Task<FullOrderDto?> GetFullOrderAsync(long orderId, CancellationToken ct)
     {
@@ -61,16 +60,14 @@ public class OrderAggregationService(
 
     private async Task<OrderDto?> GetOrderAsync(long orderId, CancellationToken ct)
     {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        deadline.CancelAfter(DownstreamTimeout);
-
         try
         {
-            return await orders.GetOrderAsync(orderId, deadline.Token);
+            return await orders.GetOrderAsync(orderId, ct);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            logger.LogError(ex, "{Service} is unavailable", "orders-api");
+            logger.LogError(ex, "{Service} is unavailable, gRPC status {GrpcStatus}",
+                "orders-api", (ex as RpcException)?.StatusCode);
             throw new UpstreamUnavailableException("orders-api", ex);
         }
     }
@@ -80,21 +77,21 @@ public class OrderAggregationService(
     {
         var stopwatch = Stopwatch.StartNew();
 
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        deadline.CancelAfter(DownstreamTimeout);
-
         try
         {
-            return await call(deadline.Token);
+            return await call(ct);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            logger.LogWarning(ex, "{Service} is unavailable after {Elapsed} ms",
-                service, stopwatch.ElapsedMilliseconds);
+            var status = (ex as RpcException)?.StatusCode;
+            var reason = status == StatusCode.DeadlineExceeded ? "timed out" : "is unavailable";
+
+            logger.LogWarning(ex, "{Service} {Reason} after {Elapsed} ms, gRPC status {GrpcStatus}",
+                service, reason, stopwatch.ElapsedMilliseconds, status);
 
             lock (warnings)
             {
-                warnings.Add($"{service} is unavailable");
+                warnings.Add($"{service} {reason}");
             }
 
             return default;
