@@ -6,6 +6,7 @@ using Reviews.Infrastructure;
 using Reviews.Infrastructure.Seeding;
 using Reviews.WebApi.Middleware;
 using Serilog;
+using Reviews.WebApi.Grpc;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +29,7 @@ builder.Services
 builder.Services.AddAutoMapper(cfg => cfg.AddMaps(typeof(ReviewProfile).Assembly));
 
 builder.Services.AddControllers();
+builder.Services.AddGrpc(options => options.Interceptors.Add<GrpcServerLoggingInterceptor>());
 
 builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = ctx =>
     ctx.ProblemDetails.Extensions["traceId"] = ctx.HttpContext.TraceIdentifier);
@@ -52,6 +54,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
+app.MapGrpcService<ReviewsGrpcService>();
 app.MapDefaultEndpoints();
 
 app.Run();
