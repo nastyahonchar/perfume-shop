@@ -1,6 +1,6 @@
 # Nota — інтернет-магазин парфумів
 
-Навчальний проєкт з дисципліни «Технології .NET розробки Web-додатків». Проєкт розвивається в межах лабораторних робіт: проєктування баз даних для мікросервісної архітектури (Лаб. 01), тришаровий Web API на ADO.NET і Dapper (Лаб. 02), тришаровий Web API на Entity Framework Core (Лаб. 03), Clean Architecture з CQRS на MongoDB (Лаб. 04) та мікросервісна платформа на .NET Aspire з API Gateway і Aggregator (Лаб. 05).
+Навчальний проєкт з дисципліни «Технології .NET розробки Web-додатків». Проєкт розвивається в межах лабораторних робіт: проєктування баз даних для мікросервісної архітектури (Лаб. 01), тришаровий Web API на ADO.NET і Dapper (Лаб. 02), тришаровий Web API на Entity Framework Core (Лаб. 03), Clean Architecture з CQRS на MongoDB (Лаб. 04), мікросервісна платформа на .NET Aspire з API Gateway і Aggregator (Лаб. 05) та gRPC-взаємодія сервісів і багаторівневе кешування з Redis (Лаб. 06).
 
 ## Зміст
 
@@ -30,6 +30,13 @@
 - [Маршрути API Gateway](#маршрути-api-gateway)
 - [Aggregator і часткові відповіді](#aggregator-і-часткові-відповіді)
 - [Спостережуваність: логи, трейси, CorrelationId](#спостережуваність-логи-трейси-correlationid)
+- [Лабораторна робота № 06: gRPC і кешування](#лабораторна-робота--06-grpc-і-кешування)
+- [Redis в AppHost](#redis-в-apphost)
+- [gRPC-контракти](#grpc-контракти)
+- [Кешування в Catalog](#кешування-в-catalog)
+- [Кеш агрегованої відповіді](#кеш-агрегованої-відповіді)
+- [Метрики кешу](#метрики-кешу)
+- [Порівняння HTTP і gRPC](#порівняння-http-і-grpc)
 - [Git-процес](#git-процес)
 
 ## Опис предметної області
@@ -149,12 +156,17 @@ perfume-shop/
 └── Services/
     ├── Orders/
     │   ├── Orders.Api/
+    │   │   ├── Protos/
+    │   │   └── Grpc/
     │   ├── Orders.Bll/
     │   ├── Orders.Dal/
     │   └── Orders.Domain/
     ├── Catalog/
     │   ├── Catalog.Api/
+    │   │   ├── Protos/
+    │   │   └── Grpc/
     │   ├── Catalog.Bll/
+    │   │   └── Caching/
     │   ├── Catalog.Dal/
     │   └── Catalog.Domain/
     └── Reviews/
@@ -162,10 +174,12 @@ perfume-shop/
         ├── Reviews.Application/
         ├── Reviews.Infrastructure/
         ├── Reviews.WebApi/
+        │   ├── Protos/
+        │   └── Grpc/
         └── Reviews.Tests/
 ```
 
-`Platform.slnx`, `Platform.AppHost` і `Services/Orders` — рішення Лабораторної роботи № 02; `Services/Catalog` додано в Лабораторній роботі № 03, `Services/Reviews` — у Лабораторній роботі № 04; `Platform.ServiceDefaults`, `Platform.ApiGateway`, `Platform.Aggregator` та оновлений `Platform.AppHost` — у Лабораторній роботі № 05.
+`Platform.slnx`, `Platform.AppHost` і `Services/Orders` — рішення Лабораторної роботи № 02; `Services/Catalog` додано в Лабораторній роботі № 03, `Services/Reviews` — у Лабораторній роботі № 04; `Platform.ServiceDefaults`, `Platform.ApiGateway`, `Platform.Aggregator` та оновлений `Platform.AppHost` — у Лабораторній роботі № 05; `Protos/`, `Grpc/` (gRPC-контракти та сервіси) і `Catalog.Bll/Caching/` (дворівневий кеш) — у Лабораторній роботі № 06.
 
 ## Лабораторна робота № 01: бази даних
 
@@ -290,7 +304,7 @@ Orders API надає HTTP-інтерфейс для роботи з клієн�
 
 ## Запуск платформи через .NET Aspire
 
-Від Лабораторної роботи № 05 усю систему (три сервіси, Aggregator, API Gateway і обидві бази даних) запускає один проєкт `Platform.AppHost`. Режиму `UseSqlContainer` більше немає: SQL Server і MongoDB завжди працюють у контейнерах.
+Від Лабораторної роботи № 05 усю систему (три сервіси, Aggregator, API Gateway і бази даних) запускає один проєкт `Platform.AppHost`; з Лабораторної роботи № 06 до неї входить і Redis. Режиму `UseSqlContainer` більше немає: SQL Server, MongoDB і Redis завжди працюють у контейнерах.
 
 ### Передумови
 
@@ -298,6 +312,7 @@ Orders API надає HTTP-інтерфейс для роботи з клієн�
 - Docker Desktop (запущений; на Windows — з WSL 2). Перевірка: `docker version`.
 - Visual Studio 2022 (17.14 або новіша) або .NET CLI.
 - Для застосування SQL-скриптів: `sqlcmd` або SSMS / Azure Data Studio.
+- Довірений сертифікат розробки для HTTPS: `dotnet dev-certs https --trust`. gRPC між сервісами працює через HTTP/2 по HTTPS.
 
 ### Пароль SQL Server
 
@@ -323,6 +338,7 @@ Aspire Dashboard відкривається за адресою з консол�
 |---|---|---|
 | `sql` | контейнер SQL Server | сервер баз Orders і Catalog (дані в томі) |
 | `mongo` | контейнер MongoDB | сервер бази відгуків (дані в томі) |
+| `redis` | контейнер Redis | розподілений кеш (рівень L2) і кеш агрегованих відповідей (дані в томі) |
 | `OrdersDb`, `CatalogDb`, `ReviewsDb` | бази даних | підключаються до сервісів через `WithReference` |
 | `orders-api` | проєкт | сервіс замовлень, клієнтів і товарів |
 | `catalog-api` | проєкт | сервіс каталогу парфумів |
@@ -330,7 +346,7 @@ Aspire Dashboard відкривається за адресою з консол�
 | `aggregator` | проєкт | зведені відповіді з кількох сервісів |
 | `gateway` | проєкт | єдина точка входу, `http://localhost:5000` |
 
-Контейнери мають постійний час життя (`Persistent`) і томи даних, тому після зупинки платформи дані зберігаються.
+Контейнери SQL Server, MongoDB і Redis мають постійний час життя (`Persistent`) і томи даних, тому після зупинки платформи дані зберігаються.
 
 ### Підготовка бази Orders
 
@@ -1007,7 +1023,7 @@ curl.exe -i "$BASE/api/reviews/000000000000000000000000"
 | `Platform.AppHost` | Оркестрація: контейнери SQL Server і MongoDB з томами, секретний параметр `sql-password`, сервіси, Gateway, Aggregator; `WithReference` і `WaitFor` задають залежності |
 | `Platform.ServiceDefaults` | Спільні налаштування: Serilog (структуровані JSON-логи), CorrelationId (middleware і `DelegatingHandler`), OpenTelemetry (трейси й метрики), health-ендпоінти, service discovery, стандартна стійкість HTTP-клієнтів |
 | `Platform.ApiGateway` | YARP-проксі: маршрути й кластери в `appsettings.json`, виявлення сервісів через Aspire |
-| `Platform.Aggregator` | Типізовані `HttpClient` до Orders, Catalog, Reviews; паралельні виклики через `Task.WhenAll`; складена відповідь `FullOrderDto` |
+| `Platform.Aggregator` | Клієнти до Orders, Catalog, Reviews (у Лаб. 05 — типізовані `HttpClient`, з Лаб. 06 — gRPC); паралельні виклики через `Task.WhenAll`; складена відповідь `FullOrderDto` |
 | `Services/*` | Мінімальні зміни: `AddServiceDefaults()`, `CorrelationIdMiddleware`, `MapDefaultEndpoints()` |
 
 ### Архітектура платформи
@@ -1019,7 +1035,7 @@ curl.exe -i "$BASE/api/reviews/000000000000000000000000"
                           └──► aggregator  ──► orders-api, catalog-api, reviews-api
 ```
 
-Адреси сервісів у коді не прописані: Gateway і Aggregator звертаються за іменами (`http://orders-api`, `https+http://catalog-api` тощо), а Aspire підставляє реальні адреси через service discovery.
+Адреси сервісів у коді не прописані: Gateway і Aggregator звертаються за іменами ресурсів (`http://orders-api`, `https://catalog-api` тощо), а Aspire підставляє реальні адреси через service discovery.
 
 ### Маршрути API Gateway
 
@@ -1039,9 +1055,9 @@ curl.exe -i "$BASE/api/reviews/000000000000000000000000"
 | Усі сервіси доступні | `200 OK`, повна відповідь |
 | Замовлення не існує | `404 Not Found` |
 | `orders-api` недоступний | `503 Service Unavailable`, `ProblemDetails` (`"orders-api is unavailable"`) |
-| `catalog-api` або `reviews-api` недоступний | `200 OK`, відповідні блоки порожні, у масиві `warnings` — рядок на кшталт `"reviews-api is unavailable"` |
+| `catalog-api` або `reviews-api` недоступний | `200 OK`, відповідні блоки порожні, у масиві `warnings` — рядок `"reviews-api is unavailable"` або `"reviews-api timed out"` (якщо сервіс не відповів за 5 секунд) |
 
-Кожен виклик має обмеження 5 секунд (`DownstreamTimeout`), тому повільний або зупинений сервіс не блокує відповідь на 30 секунд.
+Кожен виклик має обмеження 5 секунд (з Лаб. 06 — gRPC-deadline `GrpcDefaults.CallTimeout`), тому повільний або зупинений сервіс не блокує відповідь на 30 секунд.
 
 Перевірка часткової відповіді:
 
@@ -1057,6 +1073,119 @@ curl.exe -i "$BASE/api/reviews/000000000000000000000000"
 - **Трейси.** Dashboard → **Traces** → запит `aggregator`: видно спани Gateway → Aggregator → Orders/Catalog/Reviews, включно зі спанами SQL Server, MongoDB і бізнес-спанами (`Orders.Bll`, `Catalog.Bll`, `Reviews.Application`).
 - **Health.** Кожен сервіс має `/health` (готовність) і `/alive` (живість) у режимі розробки.
 
+## Лабораторна робота № 06: gRPC і кешування
+
+Між сервісами й Aggregator додано синхронну взаємодію через gRPC (Protocol Buffers), а в сервіс Catalog — кешування у два рівні: у пам'яті (L1) та в Redis (L2). Кеш агрегованої відповіді в Redis зменшує навантаження на всі три сервіси.
+
+### Redis в AppHost
+
+`Platform.AppHost` запускає Redis у контейнері з томом даних (`AddRedis("redis").WithDataVolume()`, `ContainerLifetime.Persistent`). На ресурс `redis` посилаються (`WithReference` і `WaitFor`) `orders-api`, `catalog-api`, `reviews-api` та `aggregator`. Підключення до Redis у `catalog-api` та `aggregator` виконується через Aspire-інтеграцію `AddRedisDistributedCache("redis")`, що реєструє `IDistributedCache`; рядок підключення Aspire передає сам.
+
+### gRPC-контракти
+
+Контракти лежать у `Protos/` відповідних сервісів і підключені в `.csproj` як `Protobuf` зі `GrpcServices="Server"` у сервісі та `GrpcServices="Client"` в Aggregator.
+
+| Контракт | Сервіс | RPC |
+|---|---|---|
+| `Services/Catalog/Catalog.Api/Protos/catalog.proto` | `CatalogService` | `GetProduct`, `GetProductsByIds` |
+| `Services/Orders/Orders.Api/Protos/orders.proto` | `OrdersService` | `GetOrder` |
+| `Services/Reviews/Reviews.WebApi/Protos/reviews.proto` | `ReviewsService` | `GetReview`, `GetForProducts` |
+
+gRPC-сервіси (`Grpc/` у кожному API) — тонкі адаптери над тими самими BLL-сервісами й запитами MediatR, що й REST-контролери. Помилки перекладаються в статуси gRPC:
+
+| Ситуація | Статус gRPC |
+|---|---|
+| Сутність не знайдена | `NotFound` |
+| Некоректні вхідні дані (id ≤ 0, порожній список) | `InvalidArgument` |
+| Неочікувана помилка | `Internal` (без технічних подробиць) |
+
+Спільний серверний interceptor `GrpcServerLoggingInterceptor` (`Platform.ServiceDefaults`) логує кожен виклик структурованими властивостями: `GrpcMethod`, `Peer`, `GrpcStatus`, `Elapsed`.
+
+Aggregator звертається до сервісів через типізовані клієнти (`AddGrpcClient`) з адресами за логічними іменами (`https://orders-api`, `https://catalog-api`, `https://reviews-api`). Кожен виклик має deadline 5 секунд і `CancellationToken`; каталог і відгуки викликаються паралельно (`Task.WhenAll`). `RpcException` зі статусами `Unavailable` та `DeadlineExceeded` перетворюється на попередження у відповіді замість помилки 500.
+
+### Кешування в Catalog
+
+Кешуються операції читання, які виконуються часто й рідко змінюються. Реалізація — `Services/Catalog/Catalog.Bll/Caching/`:
+
+| Файл | Призначення |
+|---|---|
+| `ICatalogCache` | інтерфейс кешу (отримати, записати, видалити) |
+| `TwoLevelCatalogCache` | дворівневий кеш L1 (`IMemoryCache`) → L2 (Redis, `IDistributedCache`) |
+| `CatalogCacheExtensions` | cache-aside в одному місці: перевірити кеш, при промаху прочитати з БД і записати |
+| `CacheKeys` | усі ключі кешу |
+| `CacheProfile` | політики часу життя й розміру записів |
+| `CacheMetrics` | метрики `cache.hits`, `cache.misses` та інші |
+
+**Локальний кеш (L1).** `AddMemoryCache` з `SizeLimit = 10 000`; кожен запис має `Size = 1`, sliding та absolute expiration і пріоритет витіснення.
+
+**Розподілений кеш (L2).** `IDistributedCache` поверх Redis; значення зберігаються як JSON (`System.Text.Json`) з префіксом `catalog:` у ключах.
+
+**Дворівневе читання.** L1 → L2 → БД; рівні заповнюються на зворотному шляху (дані з L2 потрапляють у L1). Час життя в L1 коротший за L2, щоб застарілі дані в пам'яті не переживали оновлення в Redis.
+
+| Дані | Ключ | L1 | L2 |
+|---|---|---|---|
+| Картка парфуму | `catalog:product:{id}` | sliding 30 с, absolute 1 хв | absolute 30 хв |
+| Елемент списку парфуму (для виклику за списком Id) | `catalog:product-item:{id}` | sliding 30 с, absolute 1 хв | absolute 30 хв |
+| Список брендів | `catalog:brands:all` | absolute 5 хв | absolute 6 год |
+| Список нот | `catalog:notes:{родина\|all}` | absolute 5 хв | absolute 6 год |
+
+**Інвалідація.** Кеш очищається синхронно з операцією запису, одразу після `SaveChangesAsync`:
+
+| Операція | Видаляються ключі |
+|---|---|
+| Зміна, зміна ціни, видалення парфуму | `catalog:product:{id}`, `catalog:product-item:{id}` |
+| Створення бренду | `catalog:brands:all` |
+| Зміна бренду | `catalog:brands:all` і ключі всіх парфумів цього бренду (назва бренду входить у їхні DTO) |
+| Створення ноти | усі ключі списків нот |
+
+Причина інвалідації логується (`Cache invalidated {Keys}, reason {Reason}`). Кожне влучання й промах теж логуються на рівні Debug (`Cache hit/miss {Key}, level {Level}`).
+
+**Стійкість до відмови Redis.** Виклики Redis мають ліміт очікування 1 секунда; після помилки Redis пропускається на 15 секунд, і сервіс працює далі на L1 та БД.
+
+### Кеш агрегованої відповіді
+
+`Platform.Aggregator/Caching/AggregationCache.cs` зберігає в Redis відповідь `GET /api/aggregator/orders/{id}/full`:
+
+- ключ формується з параметрів запиту: `aggregator:order-full:{orderId}`;
+- кеш перевіряється **до** gRPC-викликів;
+- TTL — 45 секунд (відповідь складається з даних трьох сервісів);
+- часткові відповіді (з `warnings`) і відповіді 404 **не кешуються**, щоб тимчасова відмова сервісу не «застрягла» в кеші;
+- недоступність Redis не ламає відповідь (як і в Catalog).
+
+### Метрики кешу
+
+Власний meter `Catalog.Cache` (реєструється в `Platform.ServiceDefaults`):
+
+| Метрика | Теги | Опис |
+|---|---|---|
+| `cache.hits` | `cache.level` = `L1` / `L2` | влучання в кеш |
+| `cache.misses` | `cache.level` = `L1` / `L2` | промахи |
+| `cache.invalidations` | — | видалені ключі після записів |
+| `cache.evictions` | `cache.reason` | витіснення з пам'яті (`Capacity`, `Expired`) |
+
+Переглянути: Aspire Dashboard → **Metrics** → ресурс `catalog-api` → `Catalog.Cache`.
+
+### Порівняння HTTP і gRPC
+
+Час відповіді `GET /api/aggregator/orders/1/full` на локальній машині. Значення відкидають перший («холодний») запит після старту платформи, який включає створення каналів, service discovery, TLS-handshake та JIT.
+
+| Варіант | Типовий час відповіді |
+|---|---|
+| HTTP (Лаб. 05) | 45–80 мс |
+| gRPC без кешу агрегованої відповіді (промах кешу) | 100–145 мс |
+| gRPC з кешем агрегованої відповіді в Redis (влучання) | 22–31 мс |
+
+У режимі промаху кешу відповідь через gRPC на локальній машині повільніша за HTTP з Лаб. 05, бо до неї додалися читання й запис у Redis, перевірка кешу Catalog та логування кожного gRPC-виклику; на таких малих обсягах даних формат серіалізації не домінує. Зате кеш агрегованої відповіді скорочує час до 22–31 мс і зменшує навантаження на всі три сервіси.
+
+### Перевірка Лабораторної роботи № 06
+
+1. Запустити платформу й переконатися, що ресурс `redis` має статус `Running`.
+2. Двічі виконати `curl.exe -i http://localhost:5000/api/perfumes/1`: у Structured logs `catalog-api` — `Cache miss` і `Cache set`, потім `Cache hit`; у Traces другий запит без SQL-спанів.
+3. Виконати `curl.exe -i http://localhost:5000/api/aggregator/orders/1/full`: у Traces видно gRPC-виклики Aggregator до `orders-api`, `catalog-api`, `reviews-api` і серверні спани сервісів в одному trace; повторний запит обслуговується кешем без gRPC-спанів.
+4. Змінити ціну (`PUT /api/perfumes/1/price`): у логах — `Cache invalidated ... reason PriceChanged`, наступне читання повертає нову ціну.
+5. Зупинити `redis` у Dashboard: запити до `catalog-api` і Aggregator далі повертають `200`, у логах — попередження про недоступність Redis.
+6. У Dashboard → **Metrics** → `catalog-api` → `Catalog.Cache` значення `cache.hits` більше нуля.
+
 ## Git-процес
 
 Для розробки використовується така модель гілок:
@@ -1066,6 +1195,7 @@ curl.exe -i "$BASE/api/reviews/000000000000000000000000"
 - `feature/lab-02-orders-service` — зміни для Лабораторної роботи № 02;
 - `feature/lab-03-catalog-service` — зміни для Лабораторної роботи № 03;
 - `feature/lab-04-reviews-service` — зміни для Лабораторної роботи № 04;
-- `feature/lab-05-aspire-platform` — зміни для Лабораторної роботи № 05.
+- `feature/lab-05-aspire-platform` — зміни для Лабораторної роботи № 05;
+- `feature/lab-06-grpc-caching` — зміни для Лабораторної роботи № 06.
 
 Зміни з feature-гілки потрапляють у `develop`, а з `develop` у `main` через Pull Request з описом.
