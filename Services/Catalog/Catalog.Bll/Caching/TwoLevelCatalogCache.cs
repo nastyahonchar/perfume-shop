@@ -8,6 +8,7 @@ namespace Catalog.Bll.Caching;
 public sealed class TwoLevelCatalogCache(
     IMemoryCache memory,
     IDistributedCache distributed,
+    CacheMetrics metrics,
     ILogger<TwoLevelCatalogCache> logger) : ICatalogCache
 {
     private static readonly TimeSpan L2Timeout = TimeSpan.FromSeconds(1);
@@ -21,10 +22,12 @@ public sealed class TwoLevelCatalogCache(
     {
         if (memory.TryGetValue(key, out T? local))
         {
+            metrics.Hit("L1");
             logger.LogDebug("Cache hit {Key}, level {Level}", key, "L1");
             return local;
         }
 
+        metrics.Miss("L1");
         logger.LogDebug("Cache miss {Key}, level {Level}", key, "L1");
 
         if (!L2Available)
@@ -35,6 +38,7 @@ public sealed class TwoLevelCatalogCache(
             var bytes = await distributed.GetAsync(key, ct).WaitAsync(L2Timeout, ct);
             if (bytes is null)
             {
+                metrics.Miss("L2");
                 logger.LogDebug("Cache miss {Key}, level {Level}", key, "L2");
                 return null;
             }
@@ -43,6 +47,7 @@ public sealed class TwoLevelCatalogCache(
             if (value is null)
                 return null;
 
+            metrics.Hit("L2");
             logger.LogDebug("Cache hit {Key}, level {Level}, size {Bytes} bytes", key, "L2", bytes.Length);
 
             SetLocal(key, value, profile);
@@ -102,18 +107,29 @@ public sealed class TwoLevelCatalogCache(
             MarkL2Unavailable(ex, "remove", string.Join(", ", keys));
         }
 
+        metrics.Invalidated(keys.Count);
         logger.LogInformation("Cache invalidated {Keys}, reason {Reason}", keys, reason);
     }
 
     private void SetLocal<T>(string key, T value, CacheProfile profile) where T : class
     {
-        memory.Set(key, value, new MemoryCacheEntryOptions
+        var options = new MemoryCacheEntryOptions
         {
             Size = profile.Size,
             SlidingExpiration = profile.L1Sliding,
             AbsoluteExpirationRelativeToNow = profile.L1Absolute,
             Priority = profile.Priority
-        });
+        };
+
+        options.RegisterPostEvictionCallback(
+            static (_, _, reason, state) =>
+            {
+                if (reason is EvictionReason.Capacity or EvictionReason.Expired or EvictionReason.TokenExpired)
+                    ((CacheMetrics)state!).Evicted(reason);
+            },
+            metrics);
+
+        memory.Set(key, value, options);
 
         logger.LogDebug(
             "Cache set {Key}, level {Level}, size {Size}, sliding {Sliding}, absolute {Absolute}",
