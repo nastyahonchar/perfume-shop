@@ -105,7 +105,12 @@ public class OrderAggregationService(
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             var status = (ex as RpcException)?.StatusCode;
-            var reason = status == StatusCode.DeadlineExceeded ? "timed out" : "is unavailable";
+            var reason = status switch
+            {
+                StatusCode.DeadlineExceeded => "timed out",
+                StatusCode.Unavailable => "is unavailable",
+                _ => "is unavailable"
+            };
 
             logger.LogWarning(ex, "{Service} {Reason} after {Elapsed} ms, gRPC status {GrpcStatus}",
                 service, reason, stopwatch.ElapsedMilliseconds, status);
