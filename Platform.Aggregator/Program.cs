@@ -5,10 +5,12 @@ using Platform.Aggregator.Clients;
 using Platform.Aggregator.Services;
 using Platform.ServiceDefaults;
 using Reviews.Grpc;
+using Platform.Aggregator.Caching;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.AddRedisDistributedCache("redis");
 
 builder.Services.AddGrpcClient<OrdersService.OrdersServiceClient>(o => o.Address = new Uri("https://orders-api"));
 builder.Services.AddGrpcClient<CatalogService.CatalogServiceClient>(o => o.Address = new Uri("https://catalog-api"));
@@ -18,6 +20,7 @@ builder.Services.AddScoped<OrdersClient>();
 builder.Services.AddScoped<CatalogClient>();
 builder.Services.AddScoped<ReviewsClient>();
 
+builder.Services.AddSingleton<AggregationCache>();
 builder.Services.AddScoped<OrderAggregationService>();
 
 builder.Services.AddControllers()

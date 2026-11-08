@@ -1,5 +1,6 @@
 ﻿using System.Diagnostics;
 using Grpc.Core;
+using Platform.Aggregator.Caching;
 using Platform.Aggregator.Clients;
 using Platform.Aggregator.Models;
 
@@ -9,6 +10,7 @@ public class OrderAggregationService(
     OrdersClient orders,
     CatalogClient catalog,
     ReviewsClient reviews,
+    AggregationCache cache,
     ILogger<OrderAggregationService> logger)
 {
     private static readonly ActivitySource Source = new("Platform.Aggregator");
@@ -17,6 +19,17 @@ public class OrderAggregationService(
     {
         using var activity = Source.StartActivity("GetFullOrder");
         activity?.SetTag("order.id", orderId);
+
+        var cacheKey = AggregationCache.OrderKey(orderId);
+        var cached = await cache.GetAsync<FullOrderDto>(cacheKey, ct);
+        if (cached is not null)
+        {
+            activity?.SetTag("cache.hit", true);
+            logger.LogInformation("Order {OrderId} served from the aggregation cache", orderId);
+            return cached;
+        }
+
+        activity?.SetTag("cache.hit", false);
 
         var warnings = new List<string>();
 
@@ -55,7 +68,15 @@ public class OrderAggregationService(
             "Order {OrderId} aggregated: {ProductsCount} products, {ReviewsCount} reviews, {WarningsCount} warnings",
             orderId, products.Count, productReviews.Count, warnings.Count);
 
-        return new FullOrderDto(order, products, productReviews, warnings);
+        var result = new FullOrderDto(order, products, productReviews, warnings);
+
+        if (warnings.Count == 0)
+            await cache.SetAsync(cacheKey, result, ct);
+        else
+            logger.LogInformation("Order {OrderId} response is partial ({WarningsCount} warnings) and is not cached",
+                orderId, warnings.Count);
+
+        return result;
     }
 
     private async Task<OrderDto?> GetOrderAsync(long orderId, CancellationToken ct)
