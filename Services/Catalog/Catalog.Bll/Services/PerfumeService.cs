@@ -66,7 +66,7 @@ public class PerfumeService : IPerfumeService
             throw new ValidationException($"At most {MaxIds} ids can be requested at once");
 
         var cached = await Task.WhenAll(
-            distinct.Select(id => _cache.GetAsync<PerfumeListItemDto>(CacheKeys.ProductItem(id), ct)));
+                        distinct.Select(id => _cache.GetAsync<PerfumeListItemDto>(CacheKeys.ProductItem(id), CacheProfiles.Product, ct)));
 
         var result = cached.Where(item => item is not null).Select(item => item!).ToList();
         var missingIds = distinct.Where((_, index) => cached[index] is null).ToList();

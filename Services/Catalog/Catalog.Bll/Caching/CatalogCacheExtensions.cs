@@ -9,7 +9,7 @@ public static class CatalogCacheExtensions
         Func<CancellationToken, Task<T?>> factory,
         CancellationToken ct) where T : class
     {
-        var cached = await cache.GetAsync<T>(key, ct);
+        var cached = await cache.GetAsync<T>(key, profile, ct);
         if (cached is not null)
             return cached;
 

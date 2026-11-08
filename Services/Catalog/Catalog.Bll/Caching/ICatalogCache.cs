@@ -2,7 +2,7 @@
 
 public interface ICatalogCache
 {
-    Task<T?> GetAsync<T>(string key, CancellationToken ct) where T : class;
+    Task<T?> GetAsync<T>(string key, CacheProfile profile, CancellationToken ct) where T : class;
 
     Task SetAsync<T>(string key, T value, CacheProfile profile, CancellationToken ct) where T : class;
 
