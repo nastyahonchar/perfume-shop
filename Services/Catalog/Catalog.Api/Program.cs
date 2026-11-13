@@ -13,14 +13,29 @@ using Serilog;
 using Catalog.Bll.Caching;
 using Catalog.Api.Grpc;
 using Catalog.Api.Metrics;
+using Catalog.Api.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
-builder.AddRedisDistributedCache("redis");
+builder.AddRedisDistributedCache("redis", settings => settings.DisableHealthChecks = true);
 
 var connectionString = builder.Configuration.GetConnectionString("CatalogDb")
     ?? throw new InvalidOperationException("Connection string 'CatalogDb' is missing");
+
+builder.Services.AddHealthChecks()
+    .AddCheck(
+        "catalog-db",
+        new SqlServerHealthCheck(connectionString),
+        HealthStatus.Unhealthy,
+        ["database", "sql", "ready"],
+        TimeSpan.FromSeconds(5))
+    .AddCheck<RedisHealthCheck>(
+        "redis-cache",
+        HealthStatus.Degraded,
+        ["cache", "redis", "ready"],
+        TimeSpan.FromSeconds(3));
 
 builder.Services.AddDbContext<CatalogDbContext>(options => options.UseSqlServer(connectionString));
 builder.Services.AddMemoryCache(options =>

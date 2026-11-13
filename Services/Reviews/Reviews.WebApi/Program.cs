@@ -7,6 +7,8 @@ using Reviews.Infrastructure.Seeding;
 using Reviews.WebApi.Middleware;
 using Serilog;
 using Reviews.WebApi.Grpc;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Reviews.WebApi.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +27,13 @@ if (!string.IsNullOrWhiteSpace(reviewsConnection))
 builder.Services
     .AddApplication()
     .AddInfrastructure(builder.Configuration);
+
+builder.Services.AddHealthChecks()
+    .AddCheck<MongoDbHealthCheck>(
+        "reviews-db",
+        HealthStatus.Unhealthy,
+        ["database", "mongodb", "ready"],
+        TimeSpan.FromSeconds(5));
 
 builder.Services.AddAutoMapper(cfg => cfg.AddMaps(typeof(ReviewProfile).Assembly));
 

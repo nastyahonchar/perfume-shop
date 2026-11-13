@@ -8,6 +8,8 @@ using Platform.ServiceDefaults;
 using Serilog;
 using Orders.Api.Grpc;
 using Orders.Api.Metrics;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Orders.Api.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -15,6 +17,14 @@ builder.AddServiceDefaults();
 
 var connectionString = builder.Configuration.GetConnectionString("OrdersDb")
     ?? throw new InvalidOperationException("Connection string 'OrdersDb' is missing");
+
+builder.Services.AddHealthChecks()
+    .AddCheck(
+        "orders-db",
+        new SqlServerHealthCheck(connectionString),
+        HealthStatus.Unhealthy,
+        ["database", "sql", "ready"],
+        TimeSpan.FromSeconds(5));
 
 builder.Services.AddScoped<IUnitOfWork>(_ => new UnitOfWork(connectionString));
 
