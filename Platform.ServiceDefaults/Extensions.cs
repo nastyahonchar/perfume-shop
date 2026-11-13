@@ -86,6 +86,8 @@ public static class Extensions
                 metrics.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation()
+                    .AddMeter("Polly")
+                    .AddMeter("Orders.Api")
                     .AddMeter("Catalog.Cache")
                     .AddMeter($"{domainPrefix}.Cache");
             })

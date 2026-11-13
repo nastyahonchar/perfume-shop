@@ -3,10 +3,11 @@ using Grpc.Core;
 using Orders.Bll.Interfaces;
 using Orders.Domain.Exceptions;
 using Orders.Grpc;
+using Orders.Api.Metrics;
 
 namespace Orders.Api.Grpc;
 
-public class OrdersGrpcService(IOrderService orders) : OrdersService.OrdersServiceBase
+public class OrdersGrpcService(IOrderService orders, OrderMetrics metrics) : OrdersService.OrdersServiceBase
 {
     public override async Task<OrderReply> GetOrder(GetOrderRequest request, ServerCallContext context)
     {
@@ -15,7 +16,7 @@ public class OrdersGrpcService(IOrderService orders) : OrdersService.OrdersServi
 
         try
         {
-            var order = await orders.GetByIdAsync(request.Id, context.CancellationToken);
+            var order = await metrics.MeasureAsync("get", () => orders.GetByIdAsync(request.Id, context.CancellationToken));
 
             var reply = new OrderReply
             {
