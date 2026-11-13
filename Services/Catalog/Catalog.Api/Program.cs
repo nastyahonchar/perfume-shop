@@ -37,6 +37,15 @@ builder.Services.AddHealthChecks()
         ["cache", "redis", "ready"],
         TimeSpan.FromSeconds(3));
 
+builder.Services.AddGrpcHealthChecks(options =>
+    options.Services.MapService("", registration => registration.Tags.Contains("ready")));
+
+builder.Services.Configure<HealthCheckPublisherOptions>(options =>
+{
+    options.Delay = TimeSpan.FromSeconds(2);
+    options.Period = TimeSpan.FromSeconds(10);
+});
+
 builder.Services.AddDbContext<CatalogDbContext>(options => options.UseSqlServer(connectionString));
 builder.Services.AddMemoryCache(options =>
 {
@@ -87,6 +96,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapControllers();
 app.MapGrpcService<CatalogGrpcService>();
+app.MapGrpcHealthChecksService();
 app.MapDefaultEndpoints();
 
 app.Run();

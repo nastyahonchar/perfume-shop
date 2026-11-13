@@ -7,15 +7,27 @@ using Platform.ServiceDefaults;
 using Reviews.Grpc;
 using Platform.Aggregator.Caching;
 using Platform.Aggregator.Resilience;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Platform.Aggregator.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
-builder.AddRedisDistributedCache("redis");
+builder.AddRedisDistributedCache("redis", settings => settings.DisableHealthChecks = true);
 
 builder.Services.AddResilientGrpcClient<OrdersService.OrdersServiceClient>("https://orders-api", ResilienceProfiles.Orders);
 builder.Services.AddResilientGrpcClient<CatalogService.CatalogServiceClient>("https://catalog-api", ResilienceProfiles.Catalog);
 builder.Services.AddResilientGrpcClient<ReviewsService.ReviewsServiceClient>("https://reviews-api", ResilienceProfiles.Reviews);
+
+builder.Services.AddHealthChecks()
+    .AddCheck<RedisHealthCheck>(
+        "redis-cache",
+        HealthStatus.Degraded,
+        ["cache", "redis", "ready"],
+        TimeSpan.FromSeconds(3))
+    .AddGrpcDependency("orders-api", HealthStatus.Unhealthy)
+    .AddGrpcDependency("catalog-api", HealthStatus.Unhealthy)
+    .AddGrpcDependency("reviews-api", HealthStatus.Degraded);
 
 builder.Services.AddScoped<OrdersClient>();
 builder.Services.AddScoped<CatalogClient>();
