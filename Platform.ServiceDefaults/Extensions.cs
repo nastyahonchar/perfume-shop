@@ -88,6 +88,7 @@ public static class Extensions
                     .AddRuntimeInstrumentation()
                     .AddMeter("Polly")
                     .AddMeter("Orders.Api")
+                    .AddMeter("Catalog.Api")
                     .AddMeter("Catalog.Cache")
                     .AddMeter($"{domainPrefix}.Cache");
             })

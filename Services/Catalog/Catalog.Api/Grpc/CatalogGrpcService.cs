@@ -1,4 +1,5 @@
-﻿using Catalog.Bll.Dtos;
+﻿using Catalog.Api.Metrics;
+using Catalog.Bll.Dtos;
 using Catalog.Bll.Interfaces;
 using Catalog.Domain.Exceptions;
 using Catalog.Grpc;
@@ -6,7 +7,7 @@ using Grpc.Core;
 
 namespace Catalog.Api.Grpc;
 
-public class CatalogGrpcService(IPerfumeService perfumes) : CatalogService.CatalogServiceBase
+public class CatalogGrpcService(IPerfumeService perfumes, CatalogMetrics metrics) : CatalogService.CatalogServiceBase
 {
     public override async Task<ProductReply> GetProduct(GetProductRequest request, ServerCallContext context)
     {
@@ -15,7 +16,7 @@ public class CatalogGrpcService(IPerfumeService perfumes) : CatalogService.Catal
 
         try
         {
-            var perfume = await perfumes.GetByIdAsync(request.Id, context.CancellationToken);
+            var perfume = await metrics.MeasureAsync("get", () => perfumes.GetByIdAsync(request.Id, context.CancellationToken));
 
             return new ProductReply
             {
@@ -41,7 +42,7 @@ public class CatalogGrpcService(IPerfumeService perfumes) : CatalogService.Catal
     {
         try
         {
-            var items = await perfumes.GetByIdsAsync(request.Ids.ToList(), context.CancellationToken);
+            var items = await metrics.MeasureAsync("get_many", () => perfumes.GetByIdsAsync(request.Ids.ToList(), context.CancellationToken));
 
             var reply = new ProductsReply();
             reply.Products.AddRange(items.Select(ToReply));

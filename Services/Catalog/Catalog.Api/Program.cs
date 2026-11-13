@@ -12,6 +12,7 @@ using Platform.ServiceDefaults;
 using Serilog;
 using Catalog.Bll.Caching;
 using Catalog.Api.Grpc;
+using Catalog.Api.Metrics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,7 +23,12 @@ var connectionString = builder.Configuration.GetConnectionString("CatalogDb")
     ?? throw new InvalidOperationException("Connection string 'CatalogDb' is missing");
 
 builder.Services.AddDbContext<CatalogDbContext>(options => options.UseSqlServer(connectionString));
-builder.Services.AddMemoryCache(options => options.SizeLimit = 10_000);
+builder.Services.AddMemoryCache(options =>
+{
+    options.SizeLimit = 10_000;
+    options.TrackStatistics = true;
+});
+builder.Services.AddSingleton<CatalogMetrics>();
 builder.Services.AddCatalogCaching();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
