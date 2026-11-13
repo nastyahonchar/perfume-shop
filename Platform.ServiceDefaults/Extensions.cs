@@ -18,6 +18,8 @@ public static class Extensions
 {
     private const string HealthEndpointPath = "/health";
     private const string AlivenessEndpointPath = "/alive";
+    private const string LivenessEndpointPath = "/health/live";
+    private const string ReadinessEndpointPath = "/health/ready";
 
     public static TBuilder AddServiceDefaults<TBuilder>(this TBuilder builder) where TBuilder : IHostApplicationBuilder
     {
@@ -151,6 +153,20 @@ public static class Extensions
 
     public static WebApplication MapDefaultEndpoints(this WebApplication app)
     {
+        var includeErrors = app.Environment.IsDevelopment();
+
+        app.MapHealthChecks(LivenessEndpointPath, new HealthCheckOptions
+        {
+            Predicate = check => check.Tags.Contains("live"),
+            ResponseWriter = (context, report) => HealthResponseWriter.WriteAsync(context, report, includeErrors)
+        });
+
+        app.MapHealthChecks(ReadinessEndpointPath, new HealthCheckOptions
+        {
+            Predicate = check => check.Tags.Contains("ready"),
+            ResponseWriter = (context, report) => HealthResponseWriter.WriteAsync(context, report, includeErrors)
+        });
+
         if (app.Environment.IsDevelopment())
         {
             app.MapHealthChecks(HealthEndpointPath);

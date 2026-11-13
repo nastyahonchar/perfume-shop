@@ -3,13 +3,16 @@ using StackExchange.Redis;
 
 namespace Platform.Aggregator.HealthChecks;
 
-public sealed class RedisHealthCheck(IConnectionMultiplexer redis) : IHealthCheck
+public sealed class RedisHealthCheck(IServiceProvider services) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context, CancellationToken cancellationToken = default)
     {
         try
         {
+            var redis = await Task.Run(() => services.GetRequiredService<IConnectionMultiplexer>(), cancellationToken)
+                .WaitAsync(cancellationToken);
+
             var latency = await redis.GetDatabase().PingAsync().WaitAsync(cancellationToken);
 
             return HealthCheckResult.Healthy($"Redis responded to PING in {latency.TotalMilliseconds:F0} ms");
