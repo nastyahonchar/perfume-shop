@@ -6,6 +6,7 @@ using Orders.Dal;
 using Orders.Dal.Interfaces;
 using Platform.ServiceDefaults;
 using Serilog;
+using Orders.Api.Grpc;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +27,7 @@ builder.Services.AddAutoMapper(cfg =>
 });
 
 builder.Services.AddControllers();
+builder.Services.AddGrpc(options => options.Interceptors.Add<GrpcServerLoggingInterceptor>());
 
 builder.Services.AddProblemDetails(o => o.CustomizeProblemDetails = ctx =>
     ctx.ProblemDetails.Extensions["traceId"] = ctx.HttpContext.TraceIdentifier);
@@ -47,6 +49,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.MapControllers();
+app.MapGrpcService<OrdersGrpcService>();
 app.MapDefaultEndpoints();
 
 app.Run();

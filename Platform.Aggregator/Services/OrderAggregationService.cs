@@ -1,4 +1,6 @@
 ﻿using System.Diagnostics;
+using Grpc.Core;
+using Platform.Aggregator.Caching;
 using Platform.Aggregator.Clients;
 using Platform.Aggregator.Models;
 
@@ -8,16 +10,26 @@ public class OrderAggregationService(
     OrdersClient orders,
     CatalogClient catalog,
     ReviewsClient reviews,
+    AggregationCache cache,
     ILogger<OrderAggregationService> logger)
 {
     private static readonly ActivitySource Source = new("Platform.Aggregator");
-
-    private static readonly TimeSpan DownstreamTimeout = TimeSpan.FromSeconds(5);
 
     public async Task<FullOrderDto?> GetFullOrderAsync(long orderId, CancellationToken ct)
     {
         using var activity = Source.StartActivity("GetFullOrder");
         activity?.SetTag("order.id", orderId);
+
+        var cacheKey = AggregationCache.OrderKey(orderId);
+        var cached = await cache.GetAsync<FullOrderDto>(cacheKey, ct);
+        if (cached is not null)
+        {
+            activity?.SetTag("cache.hit", true);
+            logger.LogInformation("Order {OrderId} served from the aggregation cache", orderId);
+            return cached;
+        }
+
+        activity?.SetTag("cache.hit", false);
 
         var warnings = new List<string>();
 
@@ -56,21 +68,27 @@ public class OrderAggregationService(
             "Order {OrderId} aggregated: {ProductsCount} products, {ReviewsCount} reviews, {WarningsCount} warnings",
             orderId, products.Count, productReviews.Count, warnings.Count);
 
-        return new FullOrderDto(order, products, productReviews, warnings);
+        var result = new FullOrderDto(order, products, productReviews, warnings);
+
+        if (warnings.Count == 0)
+            await cache.SetAsync(cacheKey, result, ct);
+        else
+            logger.LogInformation("Order {OrderId} response is partial ({WarningsCount} warnings) and is not cached",
+                orderId, warnings.Count);
+
+        return result;
     }
 
     private async Task<OrderDto?> GetOrderAsync(long orderId, CancellationToken ct)
     {
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        deadline.CancelAfter(DownstreamTimeout);
-
         try
         {
-            return await orders.GetOrderAsync(orderId, deadline.Token);
+            return await orders.GetOrderAsync(orderId, ct);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            logger.LogError(ex, "{Service} is unavailable", "orders-api");
+            logger.LogError(ex, "{Service} is unavailable, gRPC status {GrpcStatus}",
+                "orders-api", (ex as RpcException)?.StatusCode);
             throw new UpstreamUnavailableException("orders-api", ex);
         }
     }
@@ -80,21 +98,26 @@ public class OrderAggregationService(
     {
         var stopwatch = Stopwatch.StartNew();
 
-        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        deadline.CancelAfter(DownstreamTimeout);
-
         try
         {
-            return await call(deadline.Token);
+            return await call(ct);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            logger.LogWarning(ex, "{Service} is unavailable after {Elapsed} ms",
-                service, stopwatch.ElapsedMilliseconds);
+            var status = (ex as RpcException)?.StatusCode;
+            var reason = status switch
+            {
+                StatusCode.DeadlineExceeded => "timed out",
+                StatusCode.Unavailable => "is unavailable",
+                _ => "is unavailable"
+            };
+
+            logger.LogWarning(ex, "{Service} {Reason} after {Elapsed} ms, gRPC status {GrpcStatus}",
+                service, reason, stopwatch.ElapsedMilliseconds, status);
 
             lock (warnings)
             {
-                warnings.Add($"{service} is unavailable");
+                warnings.Add($"{service} {reason}");
             }
 
             return default;

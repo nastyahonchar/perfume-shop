@@ -1,9 +1,11 @@
 ﻿using System.Diagnostics;
+using Grpc.Core;
 using Platform.Aggregator.Models;
+using Reviews.Grpc;
 
 namespace Platform.Aggregator.Clients;
 
-public class ReviewsClient(HttpClient http, ILogger<ReviewsClient> logger)
+public class ReviewsClient(ReviewsService.ReviewsServiceClient grpc, ILogger<ReviewsClient> logger)
 {
     private const string ServiceName = "reviews-api";
     private const int ReviewsPerProduct = 10;
@@ -14,21 +16,42 @@ public class ReviewsClient(HttpClient http, ILogger<ReviewsClient> logger)
         if (productIds.Count == 0)
             return [];
 
-        logger.LogInformation("Calling {Service} for reviews of {ProductsCount} products",
+        logger.LogInformation("Calling {Service} gRPC GetForProducts for {ProductsCount} products",
             ServiceName, productIds.Count);
         var stopwatch = Stopwatch.StartNew();
 
-        var pages = await Task.WhenAll(productIds.Select(id => GetPageAsync(id, ct)));
-        var reviews = pages.SelectMany(page => page.Items).ToList();
+        var request = new GetForProductsRequest { PerProduct = ReviewsPerProduct };
+        request.ProductIds.AddRange(productIds);
 
-        logger.LogInformation("{Service} responded in {Elapsed} ms with {ReviewsCount} reviews",
-            ServiceName, stopwatch.ElapsedMilliseconds, reviews.Count);
+        try
+        {
+            var reply = await grpc.GetForProductsAsync(
+                request, deadline: GrpcDefaults.Deadline(), cancellationToken: ct);
 
-        return reviews;
+            logger.LogInformation("{Service} responded {GrpcStatus} in {Elapsed} ms with {ReviewsCount} reviews",
+                ServiceName, StatusCode.OK, stopwatch.ElapsedMilliseconds, reply.Reviews.Count);
+
+            return reply.Reviews.Select(ToDto).ToList();
+        }
+        catch (RpcException ex)
+        {
+            logger.LogWarning("{Service} failed with {GrpcStatus} in {Elapsed} ms",
+                ServiceName, ex.StatusCode, stopwatch.ElapsedMilliseconds);
+            throw;
+        }
     }
 
-    private async Task<PagedResultDto<ReviewDto>> GetPageAsync(long productId, CancellationToken ct)
-        => await http.GetFromJsonAsync<PagedResultDto<ReviewDto>>(
-               $"/api/reviews?productId={productId}&page=1&pageSize={ReviewsPerProduct}", ct)
-           ?? new PagedResultDto<ReviewDto>([], 0, 1, ReviewsPerProduct, 0, false, false);
+    private static ReviewDto ToDto(ReviewReply r) => new(
+        r.Id,
+        r.ProductId,
+        r.ProductName,
+        r.HasBrandName ? r.BrandName : null,
+        r.AuthorName,
+        r.Rating,
+        r.HasTitle ? r.Title : null,
+        r.HasText ? r.Text : null,
+        r.VerifiedPurchase,
+        r.CommentsCount,
+        r.CreatedAt.ToDateTime(),
+        r.Version);
 }

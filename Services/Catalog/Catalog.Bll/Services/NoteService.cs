@@ -1,4 +1,5 @@
 ﻿using AutoMapper;
+using Catalog.Bll.Caching;
 using Catalog.Bll.Dtos;
 using Catalog.Bll.Interfaces;
 using Catalog.Dal.Interfaces;
@@ -12,31 +13,34 @@ public class NoteService : INoteService
 {
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
+    private readonly ICatalogCache _cache;
 
-    public NoteService(IUnitOfWork uow, IMapper mapper)
+    public NoteService(IUnitOfWork uow, IMapper mapper, ICatalogCache cache)
     {
         _uow = uow;
         _mapper = mapper;
+        _cache = cache;
     }
 
     public async Task<IReadOnlyList<NoteDto>> GetAllAsync(string? family, CancellationToken ct)
     {
-        IReadOnlyList<Note> notes;
-
-        if (string.IsNullOrWhiteSpace(family))
+        string? canonical = null;
+        if (!string.IsNullOrWhiteSpace(family))
         {
-            notes = await _uow.Notes.GetAllAsync(ct);
-        }
-        else
-        {
-            var canonical = NoteFamilies.All.FirstOrDefault(f =>
-                                string.Equals(f, family.Trim(), StringComparison.OrdinalIgnoreCase))
-                            ?? throw new ValidationException(
-                                $"Unknown family '{family}'. Allowed: {string.Join(", ", NoteFamilies.All)}");
-            notes = await _uow.Notes.GetByFamilyAsync(canonical, ct);
+            canonical = NoteFamilies.All.FirstOrDefault(f =>
+                            string.Equals(f, family.Trim(), StringComparison.OrdinalIgnoreCase))
+                        ?? throw new ValidationException(
+                            $"Unknown family '{family}'. Allowed: {string.Join(", ", NoteFamilies.All)}");
         }
 
-        return notes.OrderBy(n => n.Name).Select(n => _mapper.Map<NoteDto>(n)).ToList();
+        return await _cache.GetOrCreateAsync<IReadOnlyList<NoteDto>>(CacheKeys.Notes(canonical), CacheProfiles.Reference, async token =>
+        {
+            IReadOnlyList<Note> notes = canonical is null
+                ? await _uow.Notes.GetAllAsync(token)
+                : await _uow.Notes.GetByFamilyAsync(canonical, token);
+
+            return notes.OrderBy(n => n.Name).Select(n => _mapper.Map<NoteDto>(n)).ToList();
+        }, ct) ?? [];
     }
 
     public async Task<NoteDto> GetByIdAsync(int id, CancellationToken ct)
@@ -64,6 +68,8 @@ public class NoteService : INoteService
         var note = new Note { Name = name, Family = family };
         await _uow.Notes.AddAsync(note, ct);
         await _uow.SaveChangesAsync(ct);
+        var keys = NoteFamilies.All.Select(f => CacheKeys.Notes(f)).Append(CacheKeys.Notes(null)).ToList();
+        await _cache.RemoveAsync(keys, "NoteCreated", ct);
         return _mapper.Map<NoteDto>(note);
     }
 }

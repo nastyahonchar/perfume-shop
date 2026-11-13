@@ -9,6 +9,7 @@ using Catalog.Domain.Constants;
 using Catalog.Domain.Entities;
 using Catalog.Domain.Exceptions;
 using Microsoft.Extensions.Logging;
+using Catalog.Bll.Caching;
 
 namespace Catalog.Bll.Services;
 
@@ -21,12 +22,14 @@ public class PerfumeService : IPerfumeService
 
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
+    private readonly ICatalogCache _cache;
     private readonly ILogger<PerfumeService> _logger;
 
-    public PerfumeService(IUnitOfWork uow, IMapper mapper, ILogger<PerfumeService> logger)
+    public PerfumeService(IUnitOfWork uow, IMapper mapper, ICatalogCache cache, ILogger<PerfumeService> logger)
     {
         _uow = uow;
         _mapper = mapper;
+        _cache = cache;
         _logger = logger;
     }
 
@@ -46,11 +49,13 @@ public class PerfumeService : IPerfumeService
     }
 
     public async Task<PerfumeDto> GetByIdAsync(int id, CancellationToken ct)
+    => await _cache.GetOrCreateAsync<PerfumeDto>(CacheKeys.Product(id), CacheProfiles.Product, async token =>
     {
-        var perfume = await _uow.Perfumes.GetWithDetailsAsync(id, ct)
+        var perfume = await _uow.Perfumes.GetWithDetailsAsync(id, token)
                       ?? throw new EntityNotFoundException($"Perfume {id} not found");
         return _mapper.Map<PerfumeDto>(perfume);
-    }
+    }, ct)
+       ?? throw new EntityNotFoundException($"Perfume {id} not found");
 
     public async Task<IReadOnlyList<PerfumeListItemDto>> GetByIdsAsync(IReadOnlyCollection<int> ids, CancellationToken ct)
     {
@@ -60,8 +65,24 @@ public class PerfumeService : IPerfumeService
         if (distinct.Count > MaxIds)
             throw new ValidationException($"At most {MaxIds} ids can be requested at once");
 
-        var items = await _uow.Perfumes.ListAsync(new PerfumesByIdsSpec(distinct), ct);
-        return items.Select(p => _mapper.Map<PerfumeListItemDto>(p)).ToList();
+        var cached = await Task.WhenAll(
+                        distinct.Select(id => _cache.GetAsync<PerfumeListItemDto>(CacheKeys.ProductItem(id), CacheProfiles.Product, ct)));
+
+        var result = cached.Where(item => item is not null).Select(item => item!).ToList();
+        var missingIds = distinct.Where((_, index) => cached[index] is null).ToList();
+
+        if (missingIds.Count > 0)
+        {
+            var loaded = await _uow.Perfumes.ListAsync(new PerfumesByIdsSpec(missingIds), ct);
+            foreach (var perfume in loaded)
+            {
+                var dto = _mapper.Map<PerfumeListItemDto>(perfume);
+                await _cache.SetAsync(CacheKeys.ProductItem(dto.Id), dto, CacheProfiles.Product, ct);
+                result.Add(dto);
+            }
+        }
+
+        return result.OrderBy(p => p.Id).ToList();
     }
 
     public async Task<IReadOnlyList<PerfumeListItemDto>> GetByNoteAsync(string noteName, string? layer, CancellationToken ct)
@@ -147,6 +168,7 @@ public class PerfumeService : IPerfumeService
         }
 
         await _uow.SaveChangesAsync(ct);
+        await InvalidateProductAsync(id, "ProductUpdated", ct);
 
         _logger.LogInformation("Perfume {PerfumeId} updated: price {Price}, season {Season}, active {IsActive}",
             id, perfume.Price, perfume.Season, perfume.IsActive);
@@ -166,6 +188,7 @@ public class PerfumeService : IPerfumeService
         perfume.ChangePrice(input.Price, ChangedBy);
 
         await _uow.SaveChangesAsync(ct);
+        await InvalidateProductAsync(id, "PriceChanged", ct);
 
         _logger.LogInformation("Perfume {PerfumeId} price changed from {OldPrice} to {NewPrice}",
             id, oldPrice, perfume.Price);
@@ -183,9 +206,13 @@ public class PerfumeService : IPerfumeService
 
         perfume.MarkDeleted(ChangedBy);
         await _uow.SaveChangesAsync(ct);
+        await InvalidateProductAsync(id, "ProductDeleted", ct);
 
         _logger.LogInformation("Perfume {PerfumeId} deleted", id);
     }
+
+    private Task InvalidateProductAsync(int id, string reason, CancellationToken ct)
+    => _cache.RemoveAsync([CacheKeys.Product(id), CacheKeys.ProductItem(id)], reason, ct);
 
     private static string? Canonical(string? value, string[] allowed, string field)
     {

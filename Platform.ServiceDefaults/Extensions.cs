@@ -85,7 +85,9 @@ public static class Extensions
             {
                 metrics.AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
-                    .AddRuntimeInstrumentation();
+                    .AddRuntimeInstrumentation()
+                    .AddMeter("Catalog.Cache")
+                    .AddMeter($"{domainPrefix}.Cache");
             })
             .WithTracing(tracing =>
             {
