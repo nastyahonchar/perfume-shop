@@ -1070,9 +1070,9 @@ curl.exe -i "$BASE/api/reviews/000000000000000000000000"
 | Усі сервіси доступні | `200 OK`, повна відповідь |
 | Замовлення не існує | `404 Not Found` |
 | `orders-api` недоступний | `503 Service Unavailable`, `ProblemDetails` (`"orders-api is unavailable"`) |
-| `catalog-api` або `reviews-api` недоступний | `200 OK`, відповідні блоки порожні, у масиві `warnings` — рядок `"reviews-api is unavailable"` або `"reviews-api timed out"` (якщо сервіс не відповів за 5 секунд) |
+| `catalog-api` або `reviews-api` недоступний | `200 OK`, відповідні блоки порожні, у масиві `warnings` — рядок `"reviews-api is unavailable"` або `"reviews-api timed out"` (якщо сервіс не відповів за відведений час) |
 
-Кожен виклик має обмеження 5 секунд (з Лаб. 06 — gRPC-deadline `GrpcDefaults.CallTimeout`), тому повільний або зупинений сервіс не блокує відповідь на 30 секунд.
+Кожен виклик має обмеження за часом (з Лаб. 06 — gRPC-deadline, з Лаб. 07 — значення залежить від критичності сервісу), тому повільний або зупинений сервіс не блокує відповідь на 30 секунд.
 
 Перевірка часткової відповіді:
 
