@@ -1,4 +1,5 @@
-﻿using Catalog.Api.Validation;
+﻿using Catalog.Api.Metrics;
+using Catalog.Api.Validation;
 using Catalog.Bll.Dtos;
 using Catalog.Bll.Interfaces;
 using Catalog.Bll.Queries;
@@ -12,7 +13,7 @@ namespace Catalog.Api.Controllers;
 [Produces("application/json")]
 [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
 [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-public class PerfumesController(IPerfumeService perfumes) : ControllerBase
+public class PerfumesController(IPerfumeService perfumes, CatalogMetrics metrics) : ControllerBase
 {
     [HttpGet]
     public async Task<ActionResult<PagedResultDto<PerfumeListItemDto>>> GetList(
@@ -23,7 +24,7 @@ public class PerfumesController(IPerfumeService perfumes) : ControllerBase
         if (await validator.CheckAsync(query, ct) is { } problem)
             return ValidationProblem(problem);
 
-        var result = await perfumes.GetListAsync(query, ct);
+        var result = await metrics.MeasureAsync("list", () => perfumes.GetListAsync(query, ct));
 
         Response.Headers["X-Total-Count"] = result.TotalCount.ToString();
         Response.Headers["X-Page"] = result.Page.ToString();
@@ -35,17 +36,17 @@ public class PerfumesController(IPerfumeService perfumes) : ControllerBase
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<PerfumeDto>> GetById(int id, CancellationToken ct)
-        => Ok(await perfumes.GetByIdAsync(id, ct));
+        => Ok(await metrics.MeasureAsync("get", () => perfumes.GetByIdAsync(id, ct)));
 
     [HttpGet("by-ids")]
     public async Task<ActionResult<IReadOnlyList<PerfumeListItemDto>>> GetByIds(
         [FromQuery] int[] ids, CancellationToken ct)
-        => Ok(await perfumes.GetByIdsAsync(ids, ct));
+        => Ok(await metrics.MeasureAsync("get_many", () => perfumes.GetByIdsAsync(ids, ct)));
 
     [HttpGet("by-note/{noteName}")]
     public async Task<ActionResult<IReadOnlyList<PerfumeListItemDto>>> GetByNote(
         string noteName, [FromQuery] string? layer, CancellationToken ct)
-        => Ok(await perfumes.GetByNoteAsync(noteName, layer, ct));
+        => Ok(await metrics.MeasureAsync("by_note", () => perfumes.GetByNoteAsync(noteName, layer, ct)));
 
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
@@ -58,7 +59,9 @@ public class PerfumesController(IPerfumeService perfumes) : ControllerBase
         if (await validator.CheckAsync(input, ct) is { } problem)
             return ValidationProblem(problem);
 
-        var created = await perfumes.CreateAsync(input, ct);
+        var created = await metrics.MeasureAsync("create", () => perfumes.CreateAsync(input, ct));
+        metrics.ProductCreated(created.Season);
+
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
@@ -73,19 +76,29 @@ public class PerfumesController(IPerfumeService perfumes) : ControllerBase
         if (await validator.CheckAsync(input, ct) is { } problem)
             return ValidationProblem(problem);
 
-        return Ok(await perfumes.UpdateAsync(id, input, ct));
+        var updated = await metrics.MeasureAsync("update", () => perfumes.UpdateAsync(id, input, ct));
+        metrics.ProductUpdated("update");
+
+        return Ok(updated);
     }
 
     [HttpPut("{id:int}/price")]
     public async Task<ActionResult<PerfumeDto>> ChangePrice(
         int id, ChangePriceDto input, CancellationToken ct)
-        => Ok(await perfumes.ChangePriceAsync(id, input, ct));
+    {
+        var updated = await metrics.MeasureAsync("change_price", () => perfumes.ChangePriceAsync(id, input, ct));
+        metrics.ProductUpdated("price_change");
+
+        return Ok(updated);
+    }
 
     [HttpDelete("{id:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
-        await perfumes.DeleteAsync(id, ct);
+        await metrics.MeasureAsync("delete", () => perfumes.DeleteAsync(id, ct));
+        metrics.ProductDeleted();
+
         return NoContent();
     }
 }

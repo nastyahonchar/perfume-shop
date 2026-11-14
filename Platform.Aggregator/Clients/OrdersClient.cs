@@ -1,7 +1,8 @@
-﻿using System.Diagnostics;
-using Grpc.Core;
+﻿using Grpc.Core;
 using Orders.Grpc;
 using Platform.Aggregator.Models;
+using Platform.Aggregator.Resilience;
+using System.Diagnostics;
 
 namespace Platform.Aggregator.Clients;
 
@@ -18,7 +19,7 @@ public class OrdersClient(OrdersService.OrdersServiceClient grpc, ILogger<Orders
         {
             var reply = await grpc.GetOrderAsync(
                 new GetOrderRequest { Id = orderId },
-                deadline: GrpcDefaults.Deadline(),
+                deadline: ResilienceProfiles.Orders.CallDeadline(),
                 cancellationToken: ct);
 
             logger.LogInformation("{Service} responded {GrpcStatus} in {Elapsed} ms",

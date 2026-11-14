@@ -1,7 +1,8 @@
-﻿using System.Diagnostics;
-using Catalog.Grpc;
+﻿using Catalog.Grpc;
 using Grpc.Core;
 using Platform.Aggregator.Models;
+using Platform.Aggregator.Resilience;
+using System.Diagnostics;
 
 namespace Platform.Aggregator.Clients;
 
@@ -26,7 +27,7 @@ public class CatalogClient(CatalogService.CatalogServiceClient grpc, ILogger<Cat
         try
         {
             var reply = await grpc.GetProductsByIdsAsync(
-                request, deadline: GrpcDefaults.Deadline(), cancellationToken: ct);
+                request, deadline: ResilienceProfiles.Catalog.CallDeadline(), cancellationToken: ct);
 
             logger.LogInformation("{Service} responded {GrpcStatus} in {Elapsed} ms with {ProductsCount} products",
                 ServiceName, StatusCode.OK, stopwatch.ElapsedMilliseconds, reply.Products.Count);

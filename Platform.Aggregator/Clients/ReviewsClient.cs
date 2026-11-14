@@ -1,7 +1,8 @@
-﻿using System.Diagnostics;
-using Grpc.Core;
+﻿using Grpc.Core;
 using Platform.Aggregator.Models;
+using Platform.Aggregator.Resilience;
 using Reviews.Grpc;
+using System.Diagnostics;
 
 namespace Platform.Aggregator.Clients;
 
@@ -26,7 +27,7 @@ public class ReviewsClient(ReviewsService.ReviewsServiceClient grpc, ILogger<Rev
         try
         {
             var reply = await grpc.GetForProductsAsync(
-                request, deadline: GrpcDefaults.Deadline(), cancellationToken: ct);
+                request, deadline: ResilienceProfiles.Reviews.CallDeadline(), cancellationToken: ct);
 
             logger.LogInformation("{Service} responded {GrpcStatus} in {Elapsed} ms with {ReviewsCount} reviews",
                 ServiceName, StatusCode.OK, stopwatch.ElapsedMilliseconds, reply.Reviews.Count);

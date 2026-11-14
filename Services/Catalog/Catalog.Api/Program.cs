@@ -12,17 +12,47 @@ using Platform.ServiceDefaults;
 using Serilog;
 using Catalog.Bll.Caching;
 using Catalog.Api.Grpc;
+using Catalog.Api.Metrics;
+using Catalog.Api.HealthChecks;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
-builder.AddRedisDistributedCache("redis");
+builder.AddRedisDistributedCache("redis", settings => settings.DisableHealthChecks = true);
 
 var connectionString = builder.Configuration.GetConnectionString("CatalogDb")
     ?? throw new InvalidOperationException("Connection string 'CatalogDb' is missing");
 
+builder.Services.AddHealthChecks()
+    .AddCheck(
+        "catalog-db",
+        new SqlServerHealthCheck(connectionString),
+        HealthStatus.Unhealthy,
+        ["database", "sql", "ready"],
+        TimeSpan.FromSeconds(5))
+    .AddCheck<RedisHealthCheck>(
+        "redis-cache",
+        HealthStatus.Degraded,
+        ["cache", "redis", "ready"],
+        TimeSpan.FromSeconds(3));
+
+builder.Services.AddGrpcHealthChecks(options =>
+    options.Services.MapService("", registration => registration.Tags.Contains("ready")));
+
+builder.Services.Configure<HealthCheckPublisherOptions>(options =>
+{
+    options.Delay = TimeSpan.FromSeconds(2);
+    options.Period = TimeSpan.FromSeconds(10);
+});
+
 builder.Services.AddDbContext<CatalogDbContext>(options => options.UseSqlServer(connectionString));
-builder.Services.AddMemoryCache(options => options.SizeLimit = 10_000);
+builder.Services.AddMemoryCache(options =>
+{
+    options.SizeLimit = 10_000;
+    options.TrackStatistics = true;
+});
+builder.Services.AddSingleton<CatalogMetrics>();
 builder.Services.AddCatalogCaching();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 
@@ -66,6 +96,7 @@ if (app.Environment.IsDevelopment())
 
 app.MapControllers();
 app.MapGrpcService<CatalogGrpcService>();
+app.MapGrpcHealthChecksService();
 app.MapDefaultEndpoints();
 
 app.Run();
