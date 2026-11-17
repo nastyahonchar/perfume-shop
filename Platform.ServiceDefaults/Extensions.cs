@@ -100,6 +100,7 @@ public static class Extensions
                     .AddSource(applicationName)
                     .AddSource($"{domainPrefix}.*")
                     .AddSource("MongoDB.Driver.Core.Extensions.DiagnosticSources")
+                    .AddSource("Platform.Messaging")
                     .AddAspNetCoreInstrumentation(options =>
                     {
                         options.RecordException = true;

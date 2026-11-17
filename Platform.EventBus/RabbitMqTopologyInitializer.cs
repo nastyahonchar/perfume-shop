@@ -53,4 +53,12 @@ public static class EventBusServiceCollectionExtensions
         services.AddHostedService<RabbitMqTopologyInitializer>();
         return services;
     }
+
+    public static IServiceCollection AddEventPublisher(this IServiceCollection services)
+    {
+        services.AddHttpContextAccessor();
+        services.AddSingleton<ICorrelationIdAccessor, CorrelationIdAccessor>();
+        services.AddSingleton<IEventPublisher, RabbitMqEventPublisher>();
+        return services;
+    }
 }
