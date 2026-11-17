@@ -16,6 +16,7 @@ using Catalog.Api.Metrics;
 using Catalog.Api.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Platform.EventBus;
+using Catalog.Api.IntegrationEvents;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -62,6 +63,8 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<IBrandService, BrandService>();
 builder.Services.AddScoped<INoteService, NoteService>();
 builder.Services.AddScoped<IPerfumeService, PerfumeService>();
+builder.Services.AddEventPublisher();
+builder.Services.AddSingleton<ICatalogEventPublisher, CatalogEventPublisher>(); 
 
 builder.Services.AddAutoMapper(cfg => cfg.AddProfile<CatalogProfile>());
 builder.Services.AddValidatorsFromAssemblyContaining<CreatePerfumeDtoValidator>();

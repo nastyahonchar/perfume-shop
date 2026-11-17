@@ -23,13 +23,20 @@ public class PerfumeService : IPerfumeService
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
     private readonly ICatalogCache _cache;
+    private readonly ICatalogEventPublisher _events;
     private readonly ILogger<PerfumeService> _logger;
 
-    public PerfumeService(IUnitOfWork uow, IMapper mapper, ICatalogCache cache, ILogger<PerfumeService> logger)
+    public PerfumeService(
+        IUnitOfWork uow,
+        IMapper mapper,
+        ICatalogCache cache,
+        ICatalogEventPublisher events,
+        ILogger<PerfumeService> logger)
     {
         _uow = uow;
         _mapper = mapper;
         _cache = cache;
+        _events = events;
         _logger = logger;
     }
 
@@ -146,6 +153,9 @@ public class PerfumeService : IPerfumeService
         var perfume = await _uow.Perfumes.GetWithDetailsAsync(id, ct)
                       ?? throw new EntityNotFoundException($"Perfume {id} not found");
 
+        var oldName = perfume.Name;
+        var oldPrice = perfume.Price;
+
         var name = input.Name.Trim();
         if (!string.Equals(perfume.Name, name, StringComparison.Ordinal))
         {
@@ -170,6 +180,14 @@ public class PerfumeService : IPerfumeService
         await _uow.SaveChangesAsync(ct);
         await InvalidateProductAsync(id, "ProductUpdated", ct);
 
+        // Події публікуються тільки після SaveChangesAsync: якщо збереження кинуло виняток,
+        // до цього рядка виконання не дійде і подія про неіснуючу зміну не з'явиться.
+        if (!string.Equals(oldName, perfume.Name, StringComparison.Ordinal))
+            await _events.PublishProductRenamedAsync(id, oldName, perfume.Name);
+
+        if (oldPrice != perfume.Price)
+            await _events.PublishPriceChangedAsync(id, perfume.Name, oldPrice, perfume.Price);
+
         _logger.LogInformation("Perfume {PerfumeId} updated: price {Price}, season {Season}, active {IsActive}",
             id, perfume.Price, perfume.Season, perfume.IsActive);
 
@@ -189,6 +207,9 @@ public class PerfumeService : IPerfumeService
 
         await _uow.SaveChangesAsync(ct);
         await InvalidateProductAsync(id, "PriceChanged", ct);
+
+        if (oldPrice != perfume.Price)
+            await _events.PublishPriceChangedAsync(id, perfume.Name, oldPrice, perfume.Price);
 
         _logger.LogInformation("Perfume {PerfumeId} price changed from {OldPrice} to {NewPrice}",
             id, oldPrice, perfume.Price);
