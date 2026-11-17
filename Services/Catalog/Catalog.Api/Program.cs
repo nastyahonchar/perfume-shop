@@ -15,10 +15,13 @@ using Catalog.Api.Grpc;
 using Catalog.Api.Metrics;
 using Catalog.Api.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Platform.EventBus;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.AddRabbitMQClient("messaging");
+builder.Services.AddEventBusTopology();
 builder.AddRedisDistributedCache("redis", settings => settings.DisableHealthChecks = true);
 
 var connectionString = builder.Configuration.GetConnectionString("CatalogDb")

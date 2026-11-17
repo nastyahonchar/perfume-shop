@@ -9,10 +9,13 @@ using Serilog;
 using Reviews.WebApi.Grpc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Reviews.WebApi.HealthChecks;
+using Platform.EventBus;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.AddRabbitMQClient("messaging");
+builder.Services.AddEventBusTopology();
 
 var reviewsConnection = builder.Configuration.GetConnectionString("ReviewsDb");
 if (!string.IsNullOrWhiteSpace(reviewsConnection))

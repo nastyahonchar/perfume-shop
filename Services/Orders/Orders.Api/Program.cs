@@ -10,10 +10,17 @@ using Orders.Api.Grpc;
 using Orders.Api.Metrics;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Orders.Api.HealthChecks;
+using Platform.EventBus;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+
+// Клієнт реєструється через Aspire RabbitMQ client integration (пакет Aspire.RabbitMQ.Client.v7,
+// RabbitMQ.Client 7.x, асинхронний API), рядок підключення бере з ресурсу "messaging" в AppHost.
+// IConnection реєструється як singleton.
+builder.AddRabbitMQClient("messaging");
+builder.Services.AddEventBusTopology();
 
 var connectionString = builder.Configuration.GetConnectionString("OrdersDb")
     ?? throw new InvalidOperationException("Connection string 'OrdersDb' is missing");
