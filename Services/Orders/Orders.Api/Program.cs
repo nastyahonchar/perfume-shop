@@ -11,6 +11,9 @@ using Orders.Api.Metrics;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Orders.Api.HealthChecks;
 using Platform.EventBus;
+using Orders.Api.IntegrationEvents;
+using Platform.EventBus.Events;
+using Platform.EventBus.Consumers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +24,9 @@ builder.AddServiceDefaults();
 // IConnection реєструється як singleton.
 builder.AddRabbitMQClient("messaging");
 builder.Services.AddEventBusTopology();
+builder.Services.AddEventConsumer(EventBusTopology.OrdersCatalogSyncQueue, consumer => consumer
+    .Handle<ProductPriceChangedEvent, ProductPriceChangedHandler>()
+    .Handle<ProductRenamedEvent, ProductRenamedHandler>());
 
 var connectionString = builder.Configuration.GetConnectionString("OrdersDb")
     ?? throw new InvalidOperationException("Connection string 'OrdersDb' is missing");
