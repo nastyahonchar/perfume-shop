@@ -17,6 +17,7 @@ public class ValidationTests
         public Task AddAsync(Review review, CancellationToken ct = default) => Task.CompletedTask;
         public Task UpdateAsync(Review review, CancellationToken ct = default) => Task.CompletedTask;
         public Task<bool> DeleteAsync(ObjectId id, CancellationToken ct = default) => Task.FromResult(false);
+        public Task<long> UpdateProductNameAsync(long productId, string productName, DateTime sourceUpdatedAtUtc, CancellationToken ct = default) => Task.FromResult(0L);
     }
 
     private static CreateReviewCommand Command(int rating = 5) => new(

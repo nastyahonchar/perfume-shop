@@ -52,4 +52,24 @@ public class ReviewRepository(MongoDbContext context) : IReviewRepository
         var result = await _reviews.DeleteOneAsync(Builders<Review>.Filter.Eq(r => r.Id, id), ct);
         return result.DeletedCount > 0;
     }
+
+    // Reviews денормалізує productName у кожному відгуку; джерело правди про назву товару лишається в Каталозі.
+    // Умова productNameUpdatedAt <= @sourceUpdatedAt захищає від подій, що прийшли не по порядку:
+    // старіша подія перейменування не перезапише новішу назву.
+    public async Task<long> UpdateProductNameAsync(
+        long productId, string productName, DateTime sourceUpdatedAtUtc, CancellationToken ct = default)
+    {
+        var filter = Builders<Review>.Filter.And(
+            Builders<Review>.Filter.Eq(r => r.ProductId, productId),
+            Builders<Review>.Filter.Or(
+                Builders<Review>.Filter.Exists("productNameUpdatedAt", false),
+                Builders<Review>.Filter.Lte("productNameUpdatedAt", sourceUpdatedAtUtc)));
+
+        var update = Builders<Review>.Update
+            .Set("productName", productName)
+            .Set("productNameUpdatedAt", sourceUpdatedAtUtc);
+
+        var result = await _reviews.UpdateManyAsync(filter, update, cancellationToken: ct);
+        return result.ModifiedCount;
+    }
 }
