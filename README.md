@@ -1,6 +1,6 @@
 # Nota — інтернет-магазин парфумів
 
-Навчальний проєкт з дисципліни «Технології .NET розробки Web-додатків». Проєкт розвивається в межах лабораторних робіт: проєктування баз даних для мікросервісної архітектури (Лаб. 01), тришаровий Web API на ADO.NET і Dapper (Лаб. 02), тришаровий Web API на Entity Framework Core (Лаб. 03), Clean Architecture з CQRS на MongoDB (Лаб. 04), мікросервісна платформа на .NET Aspire з API Gateway і Aggregator (Лаб. 05), gRPC-взаємодія сервісів і багаторівневе кешування з Redis (Лаб. 06) та стійкість до збоїв, бізнес-метрики й health checks (Лаб. 07).
+Навчальний проєкт з дисципліни «Технології .NET розробки Web-додатків». Проєкт розвивається в межах лабораторних робіт: проєктування баз даних для мікросервісної архітектури (Лаб. 01), тришаровий Web API на ADO.NET і Dapper (Лаб. 02), тришаровий Web API на Entity Framework Core (Лаб. 03), Clean Architecture з CQRS на MongoDB (Лаб. 04), мікросервісна платформа на .NET Aspire з API Gateway і Aggregator (Лаб. 05), gRPC-взаємодія сервісів і багаторівневе кешування з Redis (Лаб. 06) та стійкість до збоїв, бізнес-метрики й health checks (Лаб. 07) та подієва архітектура на RabbitMQ з ідемпотентними споживачами й реплікацією даних (Лаб. 08).
 
 ## Зміст
 
@@ -45,6 +45,15 @@
 - [Liveness і readiness](#liveness-і-readiness)
 - [Стан ресурсів у Dashboard](#стан-ресурсів-у-dashboard)
 - [Перевірка Лабораторної роботи № 07](#перевірка-лабораторної-роботи--07)
+- [Лабораторна робота № 08: подієва архітектура та RabbitMQ](#лабораторна-робота--08-подієва-архітектура-та-rabbitmq)
+- [RabbitMQ в AppHost](#rabbitmq-в-apphost)
+- [Топологія](#топологія)
+- [Події](#події)
+- [Споживачі та гарантії доставки](#споживачі-та-гарантії-доставки)
+- [Ідемпотентність](#ідемпотентність)
+- [Реплікація даних](#реплікація-даних)
+- [Трасування й логи](#трасування-й-логи)
+- [Перевірка Лабораторної роботи № 08](#перевірка-лабораторної-роботи--08)
 - [Git-процес](#git-процес)
 
 ## Опис предметної області
@@ -194,7 +203,7 @@ perfume-shop/
         └── Reviews.Tests/
 ```
 
-`Platform.slnx`, `Platform.AppHost` і `Services/Orders` — рішення Лабораторної роботи № 02; `Services/Catalog` додано в Лабораторній роботі № 03, `Services/Reviews` — у Лабораторній роботі № 04; `Platform.ServiceDefaults`, `Platform.ApiGateway`, `Platform.Aggregator` та оновлений `Platform.AppHost` — у Лабораторній роботі № 05; `Protos/`, `Grpc/` (gRPC-контракти та сервіси) і `Catalog.Bll/Caching/` (дворівневий кеш) — у Лабораторній роботі № 06; `Resilience/`, `Metrics/` і `HealthChecks/` — у Лабораторній роботі № 07.
+`Platform.slnx`, `Platform.AppHost` і `Services/Orders` — рішення Лабораторної роботи № 02; `Services/Catalog` додано в Лабораторній роботі № 03, `Services/Reviews` — у Лабораторній роботі № 04; `Platform.ServiceDefaults`, `Platform.ApiGateway`, `Platform.Aggregator` та оновлений `Platform.AppHost` — у Лабораторній роботі № 05; `Protos/`, `Grpc/` (gRPC-контракти та сервіси) і `Catalog.Bll/Caching/` (дворівневий кеш) — у Лабораторній роботі № 06; `Resilience/`, `Metrics/` і `HealthChecks/` — у Лабораторній роботі № 07; `Platform.EventBus/` (підключення до RabbitMQ, топологія, видавець і консюмер подій), `IntegrationEvents/` (обробники подій і видавці) та таблиця `ProcessedEvents` — у Лабораторній роботі № 08.
 
 ## Лабораторна робота № 01: бази даних
 
@@ -270,7 +279,7 @@ Orders API надає HTTP-інтерфейс для роботи з клієн�
 | `Orders.Bll` | Сервіси, бізнес-правила, DTO, AutoMapper і бізнес-валідація |
 | `Orders.Dal` | Репозиторії, параметризовані SQL-запити, ADO.NET, Dapper і Unit of Work |
 | `Orders.Domain` | Доменні моделі, константи й доменні винятки |
-| `Platform.AppHost` | Оркестрація всієї платформи через .NET Aspire (від Лаб. 05: усі сервіси, SQL Server і MongoDB у контейнерах, Gateway, Aggregator) |
+| `Platform.AppHost` | Оркестрація всієї платформи через .NET Aspire (від Лаб. 05: усі сервіси, SQL Server і MongoDB у контейнерах, Gateway, Aggregator, з Лаб. 08 — RabbitMQ) |
 
 ### Доступ до даних
 
@@ -319,7 +328,7 @@ Orders API надає HTTP-інтерфейс для роботи з клієн�
 
 ## Запуск платформи через .NET Aspire
 
-Від Лабораторної роботи № 05 усю систему (три сервіси, Aggregator, API Gateway і бази даних) запускає один проєкт `Platform.AppHost`; з Лабораторної роботи № 06 до неї входить і Redis. Режиму `UseSqlContainer` більше немає: SQL Server, MongoDB і Redis завжди працюють у контейнерах.
+Від Лабораторної роботи № 05 усю систему (три сервіси, Aggregator, API Gateway і бази даних) запускає один проєкт `Platform.AppHost`; з Лабораторної роботи № 06 до неї входить і Redis. Режиму `UseSqlContainer` більше немає: SQL Server, MongoDB і Redis завжди працюють у контейнерах. З Лабораторної роботи № 08 до неї входить і RabbitMQ (ресурс messaging з Management UI).
 
 ### Передумови
 
@@ -1309,6 +1318,64 @@ Endpoints реєструє `MapDefaultEndpoints` у `Platform.ServiceDefaults`; 
 4. Зупинити `sql`: `/health/live` повертає 200, `/health/ready` повертає 503, ресурси `orders-api` і `catalog-api` стають Unhealthy.
 5. Створити кілька замовлень (`POST /api/orders`): `orders.created` зростає з розбивкою за `order.status`, `orders.operation.duration` показує розподіл.
 
+## Лабораторна робота № 08: подієва архітектура та RabbitMQ
+
+### RabbitMQ в AppHost
+
+`Platform.AppHost` додає ресурс `messaging`: `AddRabbitMQ("messaging").WithDataVolume().WithManagementPlugin()`. Том зберігає черги й повідомлення між запусками, Management UI доступний з Dashboard (логін `guest`, пароль у змінній `RABBITMQ_DEFAULT_PASS` ресурсу). `orders-api`, `catalog-api` і `reviews-api` підключаються через `WithReference` + `WaitFor`, клієнт реєструється через `AddRabbitMQClient("messaging")` (пакет `Aspire.RabbitMQ.Client.v7`, RabbitMQ.Client 7.x). Код брокера винесено в `Platform.EventBus`.
+
+### Топологія
+
+Топологію оголошено в коді (`RabbitMqTopologyDeclarer`) і створюється при старті кожного сервісу.
+
+| Об'єкт | Тип | Призначення |
+|---|---|---|
+| `catalog-events` | topic exchange | події Каталогу, ключі `product.price_changed`, `product.renamed` |
+| `orders.catalog-sync` | queue (прив'язка `product.*`) | черга Orders |
+| `reviews.catalog-sync` | queue (прив'язка `product.*`) | черга Reviews |
+| `catalog-events.dlx` | direct exchange | dead-letter обмінник |
+| `orders.catalog-sync.dlq`, `reviews.catalog-sync.dlq` | queue | повідомлення, які не вдалося обробити |
+
+Основні черги мають `x-dead-letter-exchange` та `x-dead-letter-routing-key`. DLX має тип direct, щоб повідомлення однієї черги не потрапляло в DLQ іншої.
+
+### Події
+
+Події незмінні (`record` з init-only властивостями) і містять `EventId`, `OccurredAt`, `CorrelationId`: `ProductPriceChangedEvent` (ціна товару змінилась) і `ProductRenamedEvent` (товар перейменовано). Видавець `RabbitMqEventPublisher` надсилає persistent-повідомлення `application/json` (camelCase) з `MessageId = EventId`, типом події, заголовком `x-correlation-id` і W3C `traceparent`. Канал працює з publisher confirms. Каталог публікує події лише після успішного `SaveChangesAsync` (`PerfumeService`); збій публікації логується, а відповідь клієнту не скасовується (гарантована доставка потребувала б Transactional Outbox).
+
+### Споживачі та гарантії доставки
+
+`EventConsumer` — `BackgroundService` з `autoAck: false` і `BasicQos`. Підтвердження надсилається лише після успішної обробки. Доставка за принципом at-least-once, тому обробники ідемпотентні.
+
+| Ситуація | Поведінка |
+|---|---|
+| успіх | `BasicAck` |
+| постійна помилка (битий JSON, невідомий тип події, `NonRetryableEventException`) | `BasicNack` з `requeue: false`, повідомлення йде в DLQ |
+| тимчасова помилка | повторна публікація в ту саму чергу з `x-retry-count + 1` і паузою 0.5 / 1 / 2 с, після 3 спроб `BasicNack` з `requeue: false` і DLQ |
+
+### Ідемпотентність
+
+- **Orders:** таблиця `dbo.ProcessedEvents` (`EventId` — первинний ключ) у `db/p1/schema.sql`. Обробник у одній транзакції реєструє подію й змінює `Products`; дублікат пропускається.
+- **Reviews:** колекція `processedEvents` (`_id = EventId`). MongoDB працює без транзакцій, тому порядок: перевірка журналу, ідемпотентна зміна, запис у журнал.
+
+### Реплікація даних
+
+Orders тримає локальну копію `Products` (`Name`, `Price` оновлюються подіями, `Stock` належить Orders). Захист від подій не по порядку: `SourceUpdatedAt <= @SourceUpdatedAt`. Знімки в `OrderItems` не змінюються. Reviews денормалізує `productName` у відгуках і оновлює його подією `ProductRenamedEvent` (поле `productNameUpdatedAt` захищає від старих подій); події про ціну Reviews підтверджує без змін.
+
+### Трасування й логи
+
+`TracePropagation` записує `traceparent` у заголовки повідомлення, а консюмер створює Consumer Activity (`ActivitySource` `Platform.Messaging`, теги `messaging.*`) як дочірню до Producer Activity. Весь ланцюг запит → подія → обробка видно як один trace у Dashboard. Логи збоїв структуровані: `EventType`, `EventId`, `CorrelationId`, `Queue`, номер спроби, вміст події (`ProductId`, ціни, назви).
+
+### Перевірка Лабораторної роботи № 08
+
+1. Запустити платформу: у Dashboard є `messaging`, у Management UI обмінники `catalog-events`, `catalog-events.dlx` і чотири черги.
+2. Змінити ціну товару через `PUT /api/perfumes/{id}/price` з `X-Correlation-Id`: у логах `catalog-api` подія опублікована, у `orders-api` оновлено знімок ціни, у `Products` нова ціна, у `ProcessedEvents` запис події.
+3. Перейменувати товар через `PUT /api/perfumes/{id}`: `Products.Name` в Orders і `productName` у відгуках Reviews оновлені.
+4. Опублікувати одну й ту саму подію двічі через Management UI: другу пропущено (`Duplicate event skipped`).
+5. Опублікувати подію з датою в минулому: `Stale price event ignored`, дані не змінились.
+6. Опублікувати битий JSON: повідомлення одразу в `*.dlq` без повторів.
+7. Опублікувати подію з `newPrice` менше нуля: три повтори з `x-retry-count`, далі DLQ, у `ProcessedEvents` запису немає.
+8. У Dashboard → **Traces** один trace містить HTTP-запит Каталогу, span публікації та span обробки в Orders і Reviews.
+
 ## Git-процес
 
 Для розробки використовується така модель гілок:
@@ -1320,6 +1387,7 @@ Endpoints реєструє `MapDefaultEndpoints` у `Platform.ServiceDefaults`; 
 - `feature/lab-04-reviews-service` — зміни для Лабораторної роботи № 04;
 - `feature/lab-05-aspire-platform` — зміни для Лабораторної роботи № 05;
 - `feature/lab-06-grpc-caching` — зміни для Лабораторної роботи № 06;
-- `feature/lab-07-resilience-observability` — зміни для Лабораторної роботи № 07.
+- `feature/lab-07-resilience-observability` — зміни для Лабораторної роботи № 07;
+- `feature/lab-08-event-driven` — зміни для Лабораторної роботи № 08.
 
 Зміни з feature-гілки потрапляють у `develop`, а з `develop` у `main` через Pull Request з описом.
