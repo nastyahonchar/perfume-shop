@@ -9,10 +9,19 @@ using Serilog;
 using Reviews.WebApi.Grpc;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Reviews.WebApi.HealthChecks;
+using Platform.EventBus;
+using Platform.EventBus.Consumers;
+using Platform.EventBus.Events;
+using Reviews.WebApi.IntegrationEvents;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.AddRabbitMQClient("messaging");
+builder.Services.AddEventBusTopology();
+builder.Services.AddEventConsumer(EventBusTopology.ReviewsCatalogSyncQueue, consumer => consumer
+    .Handle<ProductRenamedEvent, ProductRenamedHandler>()
+    .Handle<ProductPriceChangedEvent, ProductPriceChangedHandler>());
 
 var reviewsConnection = builder.Configuration.GetConnectionString("ReviewsDb");
 if (!string.IsNullOrWhiteSpace(reviewsConnection))

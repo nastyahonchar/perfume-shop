@@ -42,6 +42,16 @@ CREATE TABLE dbo.Products (
 );
 GO
 
+-- ProcessedEvents: журнал оброблених інтеграційних подій (ідемпотентність споживача).
+-- EventId є первинним (унікальним) ключем: повторна подія з тим самим EventId вже не пройде.
+IF OBJECT_ID(N'dbo.ProcessedEvents', N'U') IS NULL
+CREATE TABLE dbo.ProcessedEvents (
+    EventId     UNIQUEIDENTIFIER NOT NULL CONSTRAINT PK_ProcessedEvents PRIMARY KEY,
+    EventType   NVARCHAR(100)    NOT NULL,
+    ProcessedAt DATETIME2        NOT NULL CONSTRAINT DF_ProcessedEvents_ProcessedAt DEFAULT SYSUTCDATETIME()
+);
+GO
+
 IF OBJECT_ID(N'dbo.Promotions', N'U') IS NULL
 CREATE TABLE dbo.Promotions (
     Id              INT IDENTITY(1,1) NOT NULL CONSTRAINT PK_Promotions PRIMARY KEY,

@@ -18,6 +18,7 @@ public static class DependencyInjection
         services.AddSingleton<MongoDbContext>();
 
         services.AddScoped<IReviewRepository, ReviewRepository>();
+        services.AddScoped<IProcessedEventRepository, ProcessedEventRepository>();
         services.AddScoped<IReviewQueries, ReviewQueries>();
 
         services.AddScoped<IDataSeeder, ReviewSeeder>();

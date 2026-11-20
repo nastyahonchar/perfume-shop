@@ -40,4 +40,42 @@ public sealed class ProductRepository : BaseDapperRepository<Product>, IProductR
             new { Season = season }, Transaction, cancellationToken: ct));
         return rows.ToList();
     }
+
+    // Orders тримає локальну копію Products: Name і Price оновлюються подіями з Каталогу.
+    // Умова SourceUpdatedAt <= @SourceUpdatedAt захищає від подій, що прийшли не по порядку:
+    // старіша подія не перезапише новіші дані. Знімки в OrderItems (UnitPrice тощо) не чіпаються,
+    // бо вони фіксують ціну на момент замовлення.
+    public Task<SnapshotUpdateResult> UpdatePriceSnapshotAsync(
+        int productId, decimal price, DateTime sourceUpdatedAtUtc, CancellationToken ct = default)
+        => UpdateSnapshotAsync(
+            productId, sourceUpdatedAtUtc, "Price = @Value", new { Value = price }, ct);
+
+    public Task<SnapshotUpdateResult> UpdateNameSnapshotAsync(
+        int productId, string name, DateTime sourceUpdatedAtUtc, CancellationToken ct = default)
+        => UpdateSnapshotAsync(
+            productId, sourceUpdatedAtUtc, "Name = @Value", new { Value = name }, ct);
+
+    private async Task<SnapshotUpdateResult> UpdateSnapshotAsync(
+        int productId, DateTime sourceUpdatedAtUtc, string assignment, object value, CancellationToken ct)
+    {
+        await EnsureOpenAsync(ct);
+
+        var exists = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT COUNT(1) FROM dbo.Products WHERE Id = @Id",
+            new { Id = productId }, Transaction, cancellationToken: ct));
+        if (exists == 0)
+            return SnapshotUpdateResult.NotFound;
+
+        var parameters = new DynamicParameters(value);
+        parameters.Add("Id", productId);
+        parameters.Add("SourceUpdatedAt", sourceUpdatedAtUtc);
+
+        var rows = await TranslateAsync(() => Connection.ExecuteAsync(new CommandDefinition($@"
+            UPDATE dbo.Products
+            SET {assignment}, SourceUpdatedAt = @SourceUpdatedAt, UpdatedAt = SYSUTCDATETIME()
+            WHERE Id = @Id AND (SourceUpdatedAt IS NULL OR SourceUpdatedAt <= @SourceUpdatedAt)",
+            parameters, Transaction, cancellationToken: ct)));
+
+        return rows > 0 ? SnapshotUpdateResult.Updated : SnapshotUpdateResult.Stale;
+    }
 }

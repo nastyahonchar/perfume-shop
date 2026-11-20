@@ -19,19 +19,27 @@ var redis = builder.AddRedis("redis")
     .WithDataVolume()
     .WithLifetime(ContainerLifetime.Persistent);
 
+var rabbit = builder.AddRabbitMQ("messaging")
+    .WithDataVolume()
+    .WithManagementPlugin()
+    .WithLifetime(ContainerLifetime.Persistent);
+
 var orders = builder.AddProject<Projects.Orders_Api>("orders-api")
     .WithReference(ordersDb).WaitFor(ordersDb)
     .WithReference(redis).WaitFor(redis)
+    .WithReference(rabbit).WaitFor(rabbit)
     .WithHttpHealthCheck("/health/ready");
 
 var catalog = builder.AddProject<Projects.Catalog_Api>("catalog-api")
     .WithReference(catalogDb).WaitFor(catalogDb)
     .WithReference(redis).WaitFor(redis)
+    .WithReference(rabbit).WaitFor(rabbit)
     .WithHttpHealthCheck("/health/ready");
 
 var reviews = builder.AddProject<Projects.Reviews_WebApi>("reviews-api")
     .WithReference(reviewsDb).WaitFor(reviewsDb)
     .WithReference(redis).WaitFor(redis)
+    .WithReference(rabbit).WaitFor(rabbit)
     .WithHttpHealthCheck("/health/ready");
 
 var aggregator = builder.AddProject<Projects.Platform_Aggregator>("aggregator")
