@@ -8,6 +8,7 @@ var sql = builder.AddSqlServer("sql", sqlPassword)
 
 var ordersDb = sql.AddDatabase("OrdersDb", "PerfumeOrdersDb");
 var catalogDb = sql.AddDatabase("CatalogDb", "PerfumeCatalogDb");
+var identityDb = sql.AddDatabase("IdentityDb", "PerfumeIdentityDb");
 
 var mongo = builder.AddMongoDB("mongo")
     .WithDataVolume()
@@ -40,6 +41,10 @@ var reviews = builder.AddProject<Projects.Reviews_WebApi>("reviews-api")
     .WithReference(reviewsDb).WaitFor(reviewsDb)
     .WithReference(redis).WaitFor(redis)
     .WithReference(rabbit).WaitFor(rabbit)
+    .WithHttpHealthCheck("/health/ready");
+
+var auth = builder.AddProject<Projects.Auth_Api>("auth-api")
+    .WithReference(identityDb).WaitFor(identityDb)
     .WithHttpHealthCheck("/health/ready");
 
 var aggregator = builder.AddProject<Projects.Platform_Aggregator>("aggregator")
