@@ -40,6 +40,7 @@ builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection(JwtSettings.SectionName));
 builder.Services.AddSingleton<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IAuthTokenService, AuthTokenService>();
+builder.Services.AddSingleton<IAuthEmailService, ConsoleEmailService>();
 
 // AddIdentity за замовчуванням вмикає cookie-схему, тому JWT потрібно призначити схемою за замовчуванням явно,
 // інакше [Authorize] перенаправляє на сторінку входу замість відповіді 401.
@@ -66,6 +67,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     await db.Database.MigrateAsync();
+    await IdentitySeeder.SeedAsync(scope.ServiceProvider, builder.Configuration, app.Environment);
 }
 
 app.UseMiddleware<CorrelationIdMiddleware>();

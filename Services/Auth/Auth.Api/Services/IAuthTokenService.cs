@@ -14,7 +14,7 @@ public interface IAuthTokenService
 
     Task<AuthTokens?> RefreshAsync(string refreshToken, string? ipAddress, CancellationToken ct = default);
 
-    Task<bool> RevokeAsync(string refreshToken, string reason, CancellationToken ct = default);
+    Task<bool> RevokeAsync(string refreshToken, string reason, string? ownerUserId = null, CancellationToken ct = default);
 
     Task RevokeAllAsync(string userId, string reason, CancellationToken ct = default);
 }

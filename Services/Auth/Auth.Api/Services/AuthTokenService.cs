@@ -67,12 +67,16 @@ public sealed class AuthTokenService(
         return tokens;
     }
 
-    public async Task<bool> RevokeAsync(string refreshToken, string reason, CancellationToken ct = default)
+    public async Task<bool> RevokeAsync(
+        string refreshToken, string reason, string? ownerUserId = null, CancellationToken ct = default)
     {
         var hash = RefreshToken.Hash(refreshToken);
         var stored = await db.RefreshTokens.SingleOrDefaultAsync(t => t.TokenHash == hash, ct);
 
         if (stored is null || stored.IsRevoked)
+            return false;
+
+        if (ownerUserId is not null && stored.UserId != ownerUserId)
             return false;
 
         stored.RevokedAt = DateTime.UtcNow;
