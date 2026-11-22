@@ -45,6 +45,7 @@ var reviews = builder.AddProject<Projects.Reviews_WebApi>("reviews-api")
 
 var auth = builder.AddProject<Projects.Auth_Api>("auth-api")
     .WithReference(identityDb).WaitFor(identityDb)
+    .WithJwtSettings(builder.Configuration)
     .WithHttpHealthCheck("/health/ready");
 
 var aggregator = builder.AddProject<Projects.Platform_Aggregator>("aggregator")
