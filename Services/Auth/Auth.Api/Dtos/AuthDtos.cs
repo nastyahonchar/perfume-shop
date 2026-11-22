@@ -36,3 +36,48 @@ public sealed record RegisterResponse(
     string Email,
     string Message,
     string? EmailConfirmationToken);
+
+
+public class VerifyEmailRequest
+{
+    [Required, EmailAddress]
+    public string Email { get; set; } = "";
+
+    [Required]
+    public string Token { get; set; } = "";
+}
+
+public class ResendVerificationRequest
+{
+    [Required, EmailAddress]
+    public string Email { get; set; } = "";
+}
+
+public class ForgotPasswordRequest
+{
+    [Required, EmailAddress]
+    public string Email { get; set; } = "";
+}
+
+public class ResetPasswordRequest
+{
+    [Required, EmailAddress]
+    public string Email { get; set; } = "";
+
+    [Required]
+    public string Token { get; set; } = "";
+
+    [Required]
+    public string NewPassword { get; set; } = "";
+}
+
+public class ChangePasswordRequest
+{
+    [Required]
+    public string CurrentPassword { get; set; } = "";
+
+    [Required]
+    public string NewPassword { get; set; } = "";
+}
+
+public sealed record MessageResponse(string Message, string? Token = null);
