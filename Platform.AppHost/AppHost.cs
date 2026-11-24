@@ -60,7 +60,9 @@ builder.AddProject<Projects.Platform_ApiGateway>("gateway")
     .WithReference(orders)
     .WithReference(catalog)
     .WithReference(reviews)
+    .WithReference(auth).WaitFor(auth)
     .WithReference(aggregator).WaitFor(aggregator)
+    .WithJwtSettings(builder.Configuration)
     .WithHttpHealthCheck("/health/ready", endpointName: "public");
 
 builder.Build().Run();
