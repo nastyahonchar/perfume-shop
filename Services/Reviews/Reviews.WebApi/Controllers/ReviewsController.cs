@@ -32,8 +32,13 @@ public class ReviewsController : ApiControllerBase
 
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
-    public async Task<ActionResult<string>> Create(CreateReviewCommand command, CancellationToken ct)
+    public async Task<ActionResult<string>> Create(CreateReviewRequest body, CancellationToken ct)
     {
+        var command = new CreateReviewCommand(
+            body.ProductId, body.ProductName, body.BrandName,
+            CurrentUserId, CurrentUserName,
+            body.Rating, body.Title, body.Text, body.ScentProfile, body.Photos);
+
         var id = await Mediator.Send(command, ct);
         return CreatedAtAction(nameof(GetById), new { id }, id);
     }
@@ -65,10 +70,10 @@ public class ReviewsController : ApiControllerBase
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ReviewDetailsDto>> AddComment(
-        string id, AddCommentRequest body, CancellationToken ct)
+    string id, AddCommentRequest body, CancellationToken ct)
     {
         var review = await Mediator.Send(
-            new AddCommentCommand(id, body.AuthorId, body.AuthorName, body.Text), ct);
+            new AddCommentCommand(id, CurrentUserId, CurrentUserName, body.Text), ct);
 
         SetETag(review.Version);
         return Ok(review);

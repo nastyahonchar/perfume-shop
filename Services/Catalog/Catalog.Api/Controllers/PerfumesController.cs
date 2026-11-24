@@ -4,11 +4,13 @@ using Catalog.Bll.Dtos;
 using Catalog.Bll.Interfaces;
 using Catalog.Bll.Queries;
 using FluentValidation;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Catalog.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/perfumes")]
 [Produces("application/json")]
 [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]

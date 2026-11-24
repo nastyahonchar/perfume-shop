@@ -21,6 +21,7 @@ using Catalog.Api.IntegrationEvents;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.Services.AddPlatformJwtAuthentication();
 builder.AddRabbitMQClient("messaging");
 builder.Services.AddEventBusTopology();
 builder.AddRedisDistributedCache("redis", settings => settings.DisableHealthChecks = true);
@@ -99,6 +100,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Сервіс сам перевіряє JWT: напряму, повз Gateway, запит без дійсного токена отримає 401. gRPC-ендпоінти лишаються відкритими для внутрішніх викликів.
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapGrpcService<CatalogGrpcService>();

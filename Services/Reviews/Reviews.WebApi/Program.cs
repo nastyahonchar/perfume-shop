@@ -17,6 +17,7 @@ using Reviews.WebApi.IntegrationEvents;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.Services.AddPlatformJwtAuthentication();
 builder.AddRabbitMQClient("messaging");
 builder.Services.AddEventBusTopology();
 builder.Services.AddEventConsumer(EventBusTopology.ReviewsCatalogSyncQueue, consumer => consumer
@@ -79,6 +80,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Сервіс сам перевіряє JWT: напряму, повз Gateway, запит без дійсного токена отримає 401. gRPC-ендпоінти лишаються відкритими для внутрішніх викликів.
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapGrpcService<ReviewsGrpcService>();

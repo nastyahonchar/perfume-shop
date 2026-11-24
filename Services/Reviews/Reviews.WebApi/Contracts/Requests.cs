@@ -2,6 +2,16 @@
 
 namespace Reviews.WebApi.Contracts;
 
+public record CreateReviewRequest(
+    long ProductId,
+    string ProductName,
+    string? BrandName,
+    int Rating,
+    string? Title,
+    string? Text,
+    ScentProfileDto? ScentProfile,
+    List<string>? Photos);
+
 public record UpdateReviewRequest(
     int Rating,
     string? Title,
@@ -9,4 +19,4 @@ public record UpdateReviewRequest(
     ScentProfileDto? ScentProfile,
     int? Version);
 
-public record AddCommentRequest(string AuthorId, string AuthorName, string Text);
+public record AddCommentRequest(string Text);

@@ -18,6 +18,7 @@ using Platform.EventBus.Consumers;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
+builder.Services.AddPlatformJwtAuthentication();
 
 // Клієнт реєструється через Aspire RabbitMQ client integration (пакет Aspire.RabbitMQ.Client.v7,
 // RabbitMQ.Client 7.x, асинхронний API), рядок підключення бере з ресурсу "messaging" в AppHost.
@@ -81,6 +82,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Сервіс сам перевіряє JWT: напряму, повз Gateway, запит без дійсного токена отримає 401. gRPC-ендпоінти лишаються відкритими для внутрішніх викликів.
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapControllers();
 app.MapGrpcService<OrdersGrpcService>();
