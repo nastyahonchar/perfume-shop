@@ -10,6 +10,11 @@ var ordersDb = sql.AddDatabase("OrdersDb", "PerfumeOrdersDb");
 var catalogDb = sql.AddDatabase("CatalogDb", "PerfumeCatalogDb");
 var identityDb = sql.AddDatabase("IdentityDb", "PerfumeIdentityDb");
 
+var identityServerDb = builder.AddSqlServer("identityserver-sql", sqlPassword)
+    .WithDataVolume()
+    .WithLifetime(ContainerLifetime.Persistent)
+    .AddDatabase("IdentityServerDb");
+
 var mongo = builder.AddMongoDB("mongo")
     .WithDataVolume()
     .WithLifetime(ContainerLifetime.Persistent);
@@ -49,6 +54,11 @@ var reviews = builder.AddProject<Projects.Reviews_WebApi>("reviews-api")
 var auth = builder.AddProject<Projects.Auth_Api>("auth-api")
     .WithReference(identityDb).WaitFor(identityDb)
     .WithJwtSettings(builder.Configuration)
+    .WithHttpHealthCheck("/health/ready");
+
+var identityServer = builder.AddProject<Projects.Platform_IdentityServer>("identityserver")
+    .WithReference(identityServerDb).WaitFor(identityServerDb)
+    .WithHttpEndpoint(port: 5100, name: "public")
     .WithHttpHealthCheck("/health/ready");
 
 var aggregator = builder.AddProject<Projects.Platform_Aggregator>("aggregator")
