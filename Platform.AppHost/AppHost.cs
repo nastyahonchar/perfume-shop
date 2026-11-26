@@ -35,6 +35,7 @@ var orders = builder.AddProject<Projects.Orders_Api>("orders-api")
     .WithReference(redis).WaitFor(redis)
     .WithReference(rabbit).WaitFor(rabbit)
     .WithJwtSettings(builder.Configuration)
+    .WithIdentityServerSettings(builder.Configuration, "orders_api")
     .WithHttpHealthCheck("/health/ready");
 
 var catalog = builder.AddProject<Projects.Catalog_Api>("catalog-api")
@@ -42,6 +43,7 @@ var catalog = builder.AddProject<Projects.Catalog_Api>("catalog-api")
     .WithReference(redis).WaitFor(redis)
     .WithReference(rabbit).WaitFor(rabbit)
     .WithJwtSettings(builder.Configuration)
+    .WithIdentityServerSettings(builder.Configuration, "products_api")
     .WithHttpHealthCheck("/health/ready");
 
 var reviews = builder.AddProject<Projects.Reviews_WebApi>("reviews-api")
@@ -66,6 +68,7 @@ var aggregator = builder.AddProject<Projects.Platform_Aggregator>("aggregator")
     .WithReference(catalog).WaitFor(catalog)
     .WithReference(reviews).WaitFor(reviews)
     .WithReference(redis).WaitFor(redis)
+    .WithAggregatorClient(builder.Configuration)
     .WithHttpHealthCheck("/health/ready");
 
 builder.AddProject<Projects.Platform_ApiGateway>("gateway")
@@ -76,6 +79,7 @@ builder.AddProject<Projects.Platform_ApiGateway>("gateway")
     .WithReference(auth).WaitFor(auth)
     .WithReference(aggregator).WaitFor(aggregator)
     .WithJwtSettings(builder.Configuration)
+    .WithIdentityServerSettings(builder.Configuration, validateAudience: false)
     .WithHttpHealthCheck("/health/ready", endpointName: "public");
 
 builder.Build().Run();

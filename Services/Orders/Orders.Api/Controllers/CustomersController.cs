@@ -14,14 +14,17 @@ namespace Orders.Api.Controllers;
 [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
 public class CustomersController(ICustomerService customers) : ControllerBase
 {
+    [Authorize(Policy = "orders.read")]
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<CustomerDto>>> GetAll(CancellationToken ct)
         => Ok(await customers.GetAllAsync(ct));
 
+    [Authorize(Policy = "orders.read")]
     [HttpGet("{id:long}")]
     public async Task<ActionResult<CustomerDto>> GetById(long id, CancellationToken ct)
         => Ok(await customers.GetByIdAsync(id, ct));
 
+    [Authorize(Policy = "orders.write")]
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<ActionResult<CustomerDto>> Create(SaveCustomerDto input, CancellationToken ct)
@@ -30,11 +33,13 @@ public class CustomersController(ICustomerService customers) : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
+    [Authorize(Policy = "orders.write")]
     [HttpPut("{id:long}")]
     public async Task<ActionResult<CustomerDto>> Update(
         long id, SaveCustomerDto input, CancellationToken ct)
         => Ok(await customers.UpdateAsync(id, input, ct));
 
+    [Authorize(Policy = "orders.write")]
     [HttpDelete("{id:long}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Delete(long id, CancellationToken ct)

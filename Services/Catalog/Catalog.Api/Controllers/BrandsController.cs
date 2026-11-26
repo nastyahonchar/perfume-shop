@@ -15,14 +15,17 @@ namespace Catalog.Api.Controllers;
 [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
 public class BrandsController(IBrandService brands) : ControllerBase
 {
+    [Authorize(Policy = "products.read")]
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<BrandDto>>> GetAll(CancellationToken ct)
         => Ok(await brands.GetAllAsync(ct));
 
+    [Authorize(Policy = "products.read")]
     [HttpGet("{id:int}")]
     public async Task<ActionResult<BrandDto>> GetById(int id, CancellationToken ct)
         => Ok(await brands.GetByIdAsync(id, ct));
 
+    [Authorize(Policy = "products.write")]
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -38,6 +41,7 @@ public class BrandsController(IBrandService brands) : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
+    [Authorize(Policy = "products.write")]
     [HttpPut("{id:int}")]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<ActionResult<BrandDto>> Update(

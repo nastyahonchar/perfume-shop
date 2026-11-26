@@ -15,19 +15,23 @@ namespace Catalog.Api.Controllers;
 [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
 public class NotesController(INoteService notes) : ControllerBase
 {
+    [Authorize(Policy = "products.read")]
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<NoteDto>>> GetAll(
         [FromQuery] string? family, CancellationToken ct)
         => Ok(await notes.GetAllAsync(family, ct));
 
+    [Authorize(Policy = "products.read")]
     [HttpGet("{id:int}")]
     public async Task<ActionResult<NoteDto>> GetById(int id, CancellationToken ct)
         => Ok(await notes.GetByIdAsync(id, ct));
 
+    [Authorize(Policy = "products.read")]
     [HttpGet("{id:int}/perfumes")]
     public async Task<ActionResult<NoteWithPerfumesDto>> GetWithPerfumes(int id, CancellationToken ct)
         => Ok(await notes.GetWithPerfumesAsync(id, ct));
 
+    [Authorize(Policy = "products.write")]
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]

@@ -15,10 +15,12 @@ namespace Orders.Api.Controllers;
 [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
 public class OrdersController(IOrderService orders, OrderMetrics metrics) : ControllerBase
 {
+    [Authorize(Policy = "orders.read")]
     [HttpGet("orders/{id:long}")]
     public async Task<ActionResult<OrderDto>> GetById(long id, CancellationToken ct)
         => Ok(await metrics.MeasureAsync("get", () => orders.GetByIdAsync(id, ct)));
 
+    [Authorize(Policy = "orders.read")]
     [HttpGet("customers/{customerId:long}/orders")]
     public async Task<ActionResult<PagedResultDto<OrderSummaryDto>>> GetByCustomer(
         long customerId,
@@ -29,6 +31,7 @@ public class OrdersController(IOrderService orders, OrderMetrics metrics) : Cont
         => Ok(await metrics.MeasureAsync("list",
             () => orders.GetByCustomerAsync(customerId, status, page, pageSize, ct)));
 
+    [Authorize(Policy = "orders.write")]
     [HttpPost("orders")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<ActionResult<OrderDto>> Create(CreateOrderDto input, CancellationToken ct)
@@ -39,11 +42,13 @@ public class OrdersController(IOrderService orders, OrderMetrics metrics) : Cont
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
+    [Authorize(Policy = "orders.write")]
     [HttpPut("orders/{id:long}")]
     public async Task<ActionResult<OrderDto>> UpdateDetails(
         long id, UpdateOrderDto input, CancellationToken ct)
         => Ok(await metrics.MeasureAsync("update", () => orders.UpdateDetailsAsync(id, input, ct)));
 
+    [Authorize(Policy = "orders.write")]
     [HttpPost("orders/{id:long}/confirm")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Confirm(long id, CancellationToken ct)
@@ -54,6 +59,7 @@ public class OrdersController(IOrderService orders, OrderMetrics metrics) : Cont
         return NoContent();
     }
 
+    [Authorize(Policy = "orders.write")]
     [HttpPut("orders/{id:long}/status")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> ChangeStatus(
@@ -65,6 +71,7 @@ public class OrdersController(IOrderService orders, OrderMetrics metrics) : Cont
         return NoContent();
     }
 
+    [Authorize(Policy = "orders.write")]
     [HttpDelete("orders/{id:long}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Delete(long id, CancellationToken ct)

@@ -1,22 +1,29 @@
-using System.Text.Json.Serialization;
 using Catalog.Grpc;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Orders.Grpc;
+using Platform.Aggregator.Auth;
+using Platform.Aggregator.Caching;
 using Platform.Aggregator.Clients;
+using Platform.Aggregator.HealthChecks;
+using Platform.Aggregator.Resilience;
 using Platform.Aggregator.Services;
 using Platform.ServiceDefaults;
 using Reviews.Grpc;
-using Platform.Aggregator.Caching;
-using Platform.Aggregator.Resilience;
-using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Platform.Aggregator.HealthChecks;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 builder.AddRedisDistributedCache("redis", settings => settings.DisableHealthChecks = true);
 
-builder.Services.AddResilientGrpcClient<OrdersService.OrdersServiceClient>("https://orders-api", ResilienceProfiles.Orders);
-builder.Services.AddResilientGrpcClient<CatalogService.CatalogServiceClient>("https://catalog-api", ResilienceProfiles.Catalog);
+builder.Services.AddSingleton<ClientCredentialsTokenProvider>();
+builder.Services.AddTransient<ClientCredentialsTokenHandler>();
+builder.Services.AddHttpClient(ClientCredentialsTokenProvider.HttpClientName);
+
+builder.Services.AddResilientGrpcClient<OrdersService.OrdersServiceClient>("https://orders-api", ResilienceProfiles.Orders)
+    .AddHttpMessageHandler<ClientCredentialsTokenHandler>();
+builder.Services.AddResilientGrpcClient<CatalogService.CatalogServiceClient>("https://catalog-api", ResilienceProfiles.Catalog)
+    .AddHttpMessageHandler<ClientCredentialsTokenHandler>();
 builder.Services.AddResilientGrpcClient<ReviewsService.ReviewsServiceClient>("https://reviews-api", ResilienceProfiles.Reviews);
 
 builder.Services.AddHealthChecks()
