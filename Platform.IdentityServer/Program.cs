@@ -1,6 +1,8 @@
 using Duende.IdentityServer.EntityFramework.DbContexts;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Platform.IdentityServer;
 using Platform.IdentityServer.Data;
 using Platform.ServiceDefaults;
 using System.Reflection;
@@ -31,6 +33,14 @@ builder.Services.AddIdentityServer(options =>
     options.Events.RaiseInformationEvents = true;
     options.Events.RaiseFailureEvents = true;
     options.Events.RaiseSuccessEvents = true;
+
+    options.UserInteraction.ErrorUrl = "/Error";
+
+    if (builder.Environment.IsDevelopment())
+    {
+        options.Authentication.CookieSameSiteMode = SameSiteMode.Lax;
+        options.Authentication.CheckSessionCookieSameSiteMode = SameSiteMode.Lax;
+    }
 })
     .AddAspNetIdentity<ApplicationUser>()
     .AddConfigurationStore(options =>
@@ -40,6 +50,12 @@ builder.Services.AddIdentityServer(options =>
         options.ConfigureDbContext = b => b.UseSqlServer(connectionString,
             sql => sql.MigrationsAssembly(migrationsAssembly)))
     .AddLicenseSummary();
+
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.PostConfigure<CookieAuthenticationOptions>(IdentityConstants.ApplicationScheme,
+        options => options.Cookie.SameSite = SameSiteMode.Lax);
+}
 
 builder.Services.AddAuthorization();
 
@@ -55,6 +71,7 @@ using (var scope = app.Services.CreateScope())
     if (app.Environment.IsDevelopment())
     {
         await IdentitySeeder.SeedAsync(services);
+        await ConfigSeeder.SeedAsync(services.GetRequiredService<ConfigurationDbContext>());
     }
 }
 
