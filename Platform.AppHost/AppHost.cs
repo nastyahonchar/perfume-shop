@@ -30,6 +30,29 @@ var rabbit = builder.AddRabbitMQ("messaging")
     .WithManagementPlugin()
     .WithLifetime(ContainerLifetime.Persistent);
 
+// Траєкторія А: Keycloak запускається контейнером з фіксованою версією образу (26.0), його дані зберігаються
+// в окремому контейнері PostgreSQL (keycloak-postgres) з томом. Підключення до бази задається змінними KC_DB*,
+// контейнери бачать один одного за іменем ресурсу. Адмін-обліковка admin/admin123 лише для розробки.
+var pgPassword = builder.AddParameter("pg-password", secret: true);
+
+var keycloakPostgres = builder.AddPostgres("keycloak-postgres", password: pgPassword)
+    .WithDataVolume()
+    .WithLifetime(ContainerLifetime.Persistent);
+
+var keycloakDb = keycloakPostgres.AddDatabase("keycloakdb");
+
+var keycloak = builder.AddContainer("keycloak", "quay.io/keycloak/keycloak", "26.0")
+    .WithEnvironment("KC_BOOTSTRAP_ADMIN_USERNAME", "admin")
+    .WithEnvironment("KC_BOOTSTRAP_ADMIN_PASSWORD", "admin123")
+    .WithEnvironment("KC_DB", "postgres")
+    .WithEnvironment("KC_DB_URL", "jdbc:postgresql://keycloak-postgres:5432/keycloakdb")
+    .WithEnvironment("KC_DB_USERNAME", "postgres")
+    .WithEnvironment("KC_DB_PASSWORD", pgPassword)
+    .WithHttpEndpoint(port: 8080, targetPort: 8080, name: "http")
+    .WithArgs("start-dev")
+    .WithLifetime(ContainerLifetime.Persistent)
+    .WaitFor(keycloakDb);
+
 var orders = builder.AddProject<Projects.Orders_Api>("orders-api")
     .WithReference(ordersDb).WaitFor(ordersDb)
     .WithReference(redis).WaitFor(redis)
