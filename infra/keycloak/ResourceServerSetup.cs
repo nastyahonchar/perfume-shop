@@ -7,9 +7,9 @@ namespace Nota.Infra;
 
 public static class ResourceServerSetup
 {
-    public static IReadOnlyList<Client> Create(Realm realm, IReadOnlyDictionary<string, Role> roles)
+    public static IReadOnlyDictionary<string, Client> Create(Realm realm, IReadOnlyDictionary<string, Role> roles)
     {
-        var servers = new List<Client>();
+        var servers = new Dictionary<string, Client>();
 
         foreach (var definition in PermissionMatrix.Servers)
         {
@@ -90,7 +90,7 @@ public static class ResourceServerSetup
                 });
             }
 
-            servers.Add(client);
+            servers[definition.ClientId] = client;
         }
 
         return servers;
