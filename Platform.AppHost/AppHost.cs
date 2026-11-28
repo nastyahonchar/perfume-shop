@@ -59,6 +59,7 @@ var orders = builder.AddProject<Projects.Orders_Api>("orders-api")
     .WithReference(rabbit).WaitFor(rabbit)
     .WithJwtSettings(builder.Configuration)
     .WithIdentityServerSettings(builder.Configuration, "orders_api")
+    .WithKeycloakSettings(builder.Configuration, "orders-api")
     .WithHttpHealthCheck("/health/ready");
 
 var catalog = builder.AddProject<Projects.Catalog_Api>("catalog-api")
@@ -67,6 +68,7 @@ var catalog = builder.AddProject<Projects.Catalog_Api>("catalog-api")
     .WithReference(rabbit).WaitFor(rabbit)
     .WithJwtSettings(builder.Configuration)
     .WithIdentityServerSettings(builder.Configuration, "products_api")
+    .WithKeycloakSettings(builder.Configuration, "products-api")
     .WithHttpHealthCheck("/health/ready");
 
 var reviews = builder.AddProject<Projects.Reviews_WebApi>("reviews-api")
@@ -103,6 +105,7 @@ builder.AddProject<Projects.Platform_ApiGateway>("gateway")
     .WithReference(aggregator).WaitFor(aggregator)
     .WithJwtSettings(builder.Configuration)
     .WithIdentityServerSettings(builder.Configuration, validateAudience: false)
+    .WithKeycloakSettings(builder.Configuration, validateAudience: false)
     .WithHttpHealthCheck("/health/ready", endpointName: "public");
 
 builder.Build().Run();

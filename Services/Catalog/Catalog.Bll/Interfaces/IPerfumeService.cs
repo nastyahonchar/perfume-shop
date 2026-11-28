@@ -12,5 +12,6 @@ public interface IPerfumeService
     Task<PerfumeDto> CreateAsync(CreatePerfumeDto input, CancellationToken ct);
     Task<PerfumeDto> UpdateAsync(int id, UpdatePerfumeDto input, CancellationToken ct);
     Task<PerfumeDto> ChangePriceAsync(int id, ChangePriceDto input, CancellationToken ct);
+    Task<PerfumeDto> PublishAsync(int id, CancellationToken ct);
     Task DeleteAsync(int id, CancellationToken ct);
 }

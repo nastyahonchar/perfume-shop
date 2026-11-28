@@ -6,7 +6,8 @@ namespace Nota.Infra;
 public enum ClientFlow
 {
     AuthorizationCode,
-    ClientCredentials
+    ClientCredentials,
+    Password
 }
 
 public sealed record ClientDefinition(
@@ -26,6 +27,7 @@ public static class ClientFactory
     {
         ClientFlow.AuthorizationCode => CreateAuthorizationCodeClient(realm, definition),
         ClientFlow.ClientCredentials => CreateClientCredentialsClient(realm, definition),
+        ClientFlow.Password => CreatePasswordClient(realm, definition),
         _ => throw new ArgumentOutOfRangeException(nameof(definition), definition.Flow, "Unsupported client flow")
     };
 
@@ -56,5 +58,18 @@ public static class ClientFactory
             ImplicitFlowEnabled = false,
             DirectAccessGrantsEnabled = false,
             ServiceAccountsEnabled = true
+        });
+
+    private static Client CreatePasswordClient(Realm realm, ClientDefinition definition) =>
+        new(definition.ClientId, new ClientArgs
+        {
+            RealmId = realm.Id,
+            ClientId = definition.ClientId,
+            Name = definition.DisplayName,
+            AccessType = "PUBLIC",
+            StandardFlowEnabled = false,
+            ImplicitFlowEnabled = false,
+            DirectAccessGrantsEnabled = true,
+            ServiceAccountsEnabled = false
         });
 }

@@ -1,4 +1,5 @@
 ﻿using Catalog.Api.Validation;
+using Platform.ServiceDefaults;
 using Catalog.Bll.Dtos;
 using Catalog.Bll.Interfaces;
 using FluentValidation;
@@ -16,22 +17,26 @@ namespace Catalog.Api.Controllers;
 public class NotesController(INoteService notes) : ControllerBase
 {
     [Authorize(Policy = "products.read")]
+    [RequirePermission("products:read")]
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<NoteDto>>> GetAll(
         [FromQuery] string? family, CancellationToken ct)
         => Ok(await notes.GetAllAsync(family, ct));
 
     [Authorize(Policy = "products.read")]
+    [RequirePermission("products:read")]
     [HttpGet("{id:int}")]
     public async Task<ActionResult<NoteDto>> GetById(int id, CancellationToken ct)
         => Ok(await notes.GetByIdAsync(id, ct));
 
     [Authorize(Policy = "products.read")]
+    [RequirePermission("products:read")]
     [HttpGet("{id:int}/perfumes")]
     public async Task<ActionResult<NoteWithPerfumesDto>> GetWithPerfumes(int id, CancellationToken ct)
         => Ok(await notes.GetWithPerfumesAsync(id, ct));
 
     [Authorize(Policy = "products.write")]
+    [RequirePermission("products:create")]
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]

@@ -20,6 +20,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.Services.AddPlatformJwtAuthentication();
 builder.Services.AddScopePolicies("orders.read", "orders.write");
+builder.Services.AddPermissionPolicies("orders:read", "orders:create", "orders:update", "orders:delete", "orders:approve");
 
 // Клієнт реєструється через Aspire RabbitMQ client integration (пакет Aspire.RabbitMQ.Client.v7,
 // RabbitMQ.Client 7.x, асинхронний API), рядок підключення бере з ресурсу "messaging" в AppHost.

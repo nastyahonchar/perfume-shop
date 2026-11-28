@@ -8,6 +8,7 @@ public static class ClientSetup
     public const string PostmanClientId = "postman";
     public const string SwaggerClientId = "swagger";
     public const string AggregatorClientId = "aggregator_service";
+    public const string TestsClientId = "nota-tests";
 
     private static readonly string[] AllResourceServers = PermissionMatrix.Servers.Select(s => s.ClientId).ToArray();
 
@@ -20,7 +21,10 @@ public static class ClientSetup
             ["https://localhost:5001/swagger/oauth2-redirect.html"], AllResourceServers),
 
         new(AggregatorClientId, "Aggregator service", ClientFlow.ClientCredentials, IsPublic: false,
-            [], ["orders-api", "products-api"])
+            [], ["orders-api", "products-api"]),
+
+        new(TestsClientId, "Automated checks (password grant, dev only)", ClientFlow.Password, IsPublic: true,
+            [], AllResourceServers)
     ];
 
     public static IReadOnlyDictionary<string, Client> Create(Realm realm) =>

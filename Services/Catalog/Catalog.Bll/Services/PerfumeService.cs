@@ -217,6 +217,24 @@ public class PerfumeService : IPerfumeService
         return _mapper.Map<PerfumeDto>(perfume);
     }
 
+    public async Task<PerfumeDto> PublishAsync(int id, CancellationToken ct)
+    {
+        using var activity = Source.StartActivity("PublishPerfume");
+        activity?.SetTag("perfume.id", id);
+
+        var perfume = await _uow.Perfumes.GetWithDetailsAsync(id, ct)
+                      ?? throw new EntityNotFoundException($"Perfume {id} not found");
+
+        perfume.Activate(ChangedBy);
+
+        await _uow.SaveChangesAsync(ct);
+        await InvalidateProductAsync(id, "Published", ct);
+
+        _logger.LogInformation("Perfume {PerfumeId} published", id);
+
+        return _mapper.Map<PerfumeDto>(perfume);
+    }
+
     public async Task DeleteAsync(int id, CancellationToken ct)
     {
         using var activity = Source.StartActivity("DeletePerfume");

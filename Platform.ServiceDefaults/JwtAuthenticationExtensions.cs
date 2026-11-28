@@ -13,12 +13,14 @@ public static class JwtAuthenticationExtensions
 {
     public const string PlatformScheme = "Platform";
     public const string IdentityServerScheme = "IdentityServer";
+    public const string KeycloakScheme = "Keycloak";
 
     // Спільна валідація access token. Схема "Platform" дивиться на issuer токена й вибирає перевірку:
     // токени Auth Service перевіряються за підписом HMAC SHA-256 (Jwt:Issuer, Jwt:Audience, Jwt:SecretKey),
-    // токени Duende IdentityServer через Authority (IdentityServer:Authority): ключі підпису завантажуються
-    // автоматично з discovery document, а Audience (IdentityServer:Audience) це ім'я ApiResource сервісу.
-    // Сервіс перевіряє токен локально, не звертаючись до Auth Service чи IdentityServer при кожному запиті.
+    // токени Duende IdentityServer та Keycloak через Authority (IdentityServer:Authority, Keycloak:Authority):
+    // ключі підпису завантажуються автоматично з discovery document, а Audience це ім'я ApiResource
+    // (IdentityServer) або resource server (Keycloak) сервісу.
+    // Сервіс перевіряє токен локально, не звертаючись до Auth Service, IdentityServer чи Keycloak при кожному запиті.
     public static IServiceCollection AddPlatformJwtAuthentication(this IServiceCollection services)
     {
         services.AddAuthentication(options =>
@@ -27,10 +29,11 @@ public static class JwtAuthenticationExtensions
             options.DefaultAuthenticateScheme = PlatformScheme;
             options.DefaultChallengeScheme = PlatformScheme;
         })
-            .AddPolicyScheme(PlatformScheme, "Auth Service or IdentityServer",
+            .AddPolicyScheme(PlatformScheme, "Auth Service, IdentityServer or Keycloak",
                 options => options.ForwardDefaultSelector = SelectScheme)
             .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, _ => { })
-            .AddJwtBearer(IdentityServerScheme, _ => { });
+            .AddJwtBearer(IdentityServerScheme, _ => { })
+            .AddJwtBearer(KeycloakScheme, _ => { });
 
         services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme)
             .Configure<IConfiguration>((options, configuration) =>
@@ -54,43 +57,61 @@ public static class JwtAuthenticationExtensions
 
         services.AddOptions<JwtBearerOptions>(IdentityServerScheme)
             .Configure<IConfiguration>((options, configuration) =>
-            {
-                var section = configuration.GetSection("IdentityServer");
+                ConfigureAuthority(options, configuration.GetSection("IdentityServer")));
 
-                options.Authority = section["Authority"];
-                options.RequireHttpsMetadata = false;
-                options.MapInboundClaims = false;
-                options.TokenValidationParameters = new TokenValidationParameters
-                {
-                    ValidateAudience = section.GetValue("ValidateAudience", true),
-                    ValidAudience = section["Audience"],
-                    ValidateLifetime = true,
-                    ClockSkew = TimeSpan.FromSeconds(30)
-                };
-            });
+        services.AddOptions<JwtBearerOptions>(KeycloakScheme)
+            .Configure<IConfiguration>((options, configuration) =>
+                ConfigureAuthority(options, configuration.GetSection("Keycloak")));
 
         services.AddAuthorization();
 
         return services;
     }
 
+    private static void ConfigureAuthority(JwtBearerOptions options, IConfigurationSection section)
+    {
+        options.Authority = section["Authority"];
+        options.RequireHttpsMetadata = false;
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateAudience = section.GetValue("ValidateAudience", true),
+            ValidAudience = section["Audience"],
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30)
+        };
+    }
+
     private static string SelectScheme(HttpContext context)
     {
-        var authority = context.RequestServices.GetRequiredService<IConfiguration>()["IdentityServer:Authority"]?.TrimEnd('/');
+        var configuration = context.RequestServices.GetRequiredService<IConfiguration>();
         var header = context.Request.Headers.Authorization.ToString();
 
-        if (!string.IsNullOrEmpty(authority) && header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
         {
             var token = header["Bearer ".Length..].Trim();
             var handler = new JsonWebTokenHandler();
 
-            if (handler.CanReadToken(token)
-                && string.Equals(handler.ReadJsonWebToken(token).Issuer?.TrimEnd('/'), authority, StringComparison.Ordinal))
+            if (handler.CanReadToken(token))
             {
-                return IdentityServerScheme;
+                var issuer = handler.ReadJsonWebToken(token).Issuer?.TrimEnd('/');
+
+                if (IsAuthority(issuer, configuration["IdentityServer:Authority"]))
+                {
+                    return IdentityServerScheme;
+                }
+
+                if (IsAuthority(issuer, configuration["Keycloak:Authority"]))
+                {
+                    return KeycloakScheme;
+                }
             }
         }
 
         return JwtBearerDefaults.AuthenticationScheme;
     }
+
+    private static bool IsAuthority(string? issuer, string? authority)
+        => !string.IsNullOrEmpty(authority)
+           && string.Equals(issuer, authority.TrimEnd('/'), StringComparison.Ordinal);
 }

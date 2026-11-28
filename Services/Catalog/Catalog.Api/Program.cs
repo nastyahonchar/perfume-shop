@@ -23,6 +23,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.AddServiceDefaults();
 builder.Services.AddPlatformJwtAuthentication();
 builder.Services.AddScopePolicies("products.read", "products.write");
+builder.Services.AddPermissionPolicies("products:read", "products:create", "products:update", "products:delete", "products:publish");
 builder.AddRabbitMQClient("messaging");
 builder.Services.AddEventBusTopology();
 builder.AddRedisDistributedCache("redis", settings => settings.DisableHealthChecks = true);

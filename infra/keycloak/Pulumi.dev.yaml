@@ -5,3 +5,4 @@ config:
   keycloak:username: admin
   keycloak:password:
     secure: v1:MtG3zEnGXDAM1k/e:yxO+BBQO4S24hZHfAeKJpTlKJ4ZNc+55
+  keycloak:clientTimeout: "120"

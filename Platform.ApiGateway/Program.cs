@@ -16,9 +16,10 @@ var app = builder.Build();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<RoutingLoggingMiddleware>();
 
-// Gateway перевіряє JWT ДО проксіювання: маршрути з політикою "default" без дійсного токена одразу отримують 401,
-// запит до сервісу не доходить. Маршрут /auth/** має політику "anonymous" (login і register без токена),
-// заголовок Authorization передається далі, тому мікросервіси валідують токен незалежно.
+// Варіант Б: Gateway перевіряє токен (невалідний або відсутній токен відсікається 401 до сервісу) і пересилає
+// заголовок Authorization без змін. Кожен сервіс (Orders, Catalog, Payments) валідує токен незалежно і сам
+// вирішує, чи вистачає permissions на конкретному endpoint. Gateway не перевіряє audience токена Keycloak
+// (Keycloak:ValidateAudience=false), бо через нього проходять токени для різних resource servers.
 app.UseAuthentication();
 app.UseAuthorization();
 

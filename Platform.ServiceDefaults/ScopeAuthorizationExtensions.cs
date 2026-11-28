@@ -13,6 +13,8 @@ public sealed class ScopeRequirement(string scope) : IAuthorizationRequirement
 // Політика з іменем scope (наприклад "orders.read") пропускає токен IdentityServer лише тоді, коли в ньому є
 // такий scope: це дає fine-grained доступ, окремо на читання і на запис. Токени Auth Service (користувачі платформи)
 // scope не містять, їх довіру забезпечує підпис ключем Auth Service (claim iss збігається з Jwt:Issuer).
+// Токени Keycloak теж не містять таких scopes: їхні права вирішують permission-політики (PermissionRequirement),
+// тому тут вони пропускаються за issuer (Keycloak:Authority).
 public sealed class ScopeAuthorizationHandler(IConfiguration configuration) : AuthorizationHandler<ScopeRequirement>
 {
     protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, ScopeRequirement requirement)
@@ -25,7 +27,10 @@ public sealed class ScopeAuthorizationHandler(IConfiguration configuration) : Au
         var localIssuer = configuration["Jwt:Issuer"];
         var isLocalUser = !string.IsNullOrEmpty(localIssuer) && user.HasClaim("iss", localIssuer);
 
-        if (hasScope || isLocalUser)
+        var keycloakIssuer = configuration["Keycloak:Authority"]?.TrimEnd('/');
+        var isKeycloakUser = !string.IsNullOrEmpty(keycloakIssuer) && user.HasClaim("iss", keycloakIssuer);
+
+        if (hasScope || isLocalUser || isKeycloakUser)
         {
             context.Succeed(requirement);
         }
