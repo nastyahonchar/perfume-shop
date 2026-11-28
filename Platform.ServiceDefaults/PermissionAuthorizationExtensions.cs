@@ -6,17 +6,19 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Platform.ServiceDefaults;
 
-public sealed class PermissionRequirement(string permission) : IAuthorizationRequirement
+public sealed class PermissionRequirement(string permission, bool keycloakOnly = false) : IAuthorizationRequirement
 {
     public string Permission { get; } = permission;
+
+    public bool KeycloakOnly { get; } = keycloakOnly;
 }
 
 // Токен Keycloak (RPT, отриманий через UMA-grant) містить claim "authorization" з JSON
 // { "permissions": [ { "rsname": "orders-api", "scopes": ["orders:read", ...] } ] }.
 // Handler парсить цей JSON і шукає серед scopes потрібний permission. Рішення приймає сам сервіс локально,
 // без звернення до Keycloak на кожен запит. Якщо permission немає, requirement не виконується і клієнт отримує 403.
-// Токени Auth Service та IdentityServer не містять цього claim: для них діють scope-політики (ScopeRequirement),
-// тому тут вони пропускаються за issuer.
+// Токени Auth Service та IdentityServer не містять цього claim: для звичайних політик вони пропускаються за issuer
+// (їх обмежують scope-політики), а політики з KeycloakOnly (Payments) приймають тільки токени Keycloak.
 public sealed class PermissionAuthorizationHandler(IConfiguration configuration)
     : AuthorizationHandler<PermissionRequirement>
 {
@@ -27,7 +29,11 @@ public sealed class PermissionAuthorizationHandler(IConfiguration configuration)
 
         if (!isKeycloakToken)
         {
-            context.Succeed(requirement);
+            if (!requirement.KeycloakOnly)
+            {
+                context.Succeed(requirement);
+            }
+
             return Task.CompletedTask;
         }
 
@@ -74,6 +80,12 @@ public sealed class RequirePermissionAttribute(string permission) : AuthorizeAtt
 public static class PermissionAuthorizationExtensions
 {
     public static IServiceCollection AddPermissionPolicies(this IServiceCollection services, params string[] permissions)
+        => AddPolicies(services, keycloakOnly: false, permissions);
+
+    public static IServiceCollection AddKeycloakOnlyPermissionPolicies(this IServiceCollection services, params string[] permissions)
+        => AddPolicies(services, keycloakOnly: true, permissions);
+
+    private static IServiceCollection AddPolicies(IServiceCollection services, bool keycloakOnly, string[] permissions)
     {
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IAuthorizationHandler, PermissionAuthorizationHandler>());
 
@@ -83,7 +95,7 @@ public static class PermissionAuthorizationExtensions
             {
                 options.AddPolicy(permission, policy => policy
                     .RequireAuthenticatedUser()
-                    .AddRequirements(new PermissionRequirement(permission)));
+                    .AddRequirements(new PermissionRequirement(permission, keycloakOnly)));
             }
         });
 
